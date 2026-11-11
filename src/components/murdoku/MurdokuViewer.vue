@@ -1,32 +1,34 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
-import { BLOCKING_OBJECTS, OBJECT_KINDS, generatePuzzle } from "../../murdoku";
-import MurdokuBoard from "./MurdokuBoard.vue";
-import MurdokuClues from "./MurdokuClues.vue";
+import { computed, shallowRef, watchEffect } from "vue";
+import { generatePuzzle } from "../../murdoku";
+import MurdokuGame from "./MurdokuGame.vue";
 import MurdokuSteps from "./MurdokuSteps.vue";
-import { GENDER_NAMES, OBJECT_ICONS, OBJECT_NAMES, personLabel } from "./labels";
 
 const SIZES = [4, 5, 6, 7, 8, 9];
 const randomSeed = () => Math.floor(Math.random() * 1_000_000);
 
-const size = shallowRef(6);
-const seed = shallowRef(randomSeed());
+// The puzzle lives in the URL so a reload or a shared link gives the same one.
+const params = new URLSearchParams(location.search);
+const urlSize = Number(params.get("size"));
+const urlSeed = Number(params.get("seed") ?? NaN);
+
+const size = shallowRef(SIZES.includes(urlSize) ? urlSize : 6);
+const seedInput = shallowRef<number | "">(
+  Number.isInteger(urlSeed) && urlSeed >= 0 ? urlSeed : randomSeed(),
+);
 const showSolution = shallowRef(false);
 
-const puzzle = computed(() => generatePuzzle({ size: size.value, seed: seed.value || 0 }));
+// an emptied number input yields ""
+const seed = computed(() => seedInput.value || 0);
+const puzzle = computed(() => generatePuzzle({ size: size.value, seed: seed.value }));
 
-const legend = OBJECT_KINDS.map((kind) => ({
-  kind,
-  icon: OBJECT_ICONS[kind],
-  name: OBJECT_NAMES[kind],
-  blocking: (BLOCKING_OBJECTS as readonly string[]).includes(kind),
-}));
+watchEffect(() => history.replaceState(null, "", `?size=${size.value}&seed=${seed.value}`));
 </script>
 
 <template>
   <main class="viewer">
     <header class="header">
-      <h1>Murdoku 出題器</h1>
+      <h1>Murdoku</h1>
       <form class="controls" @submit.prevent>
         <label>
           大小
@@ -36,9 +38,9 @@ const legend = OBJECT_KINDS.map((kind) => ({
         </label>
         <label>
           Seed
-          <input v-model.number="seed" type="number" min="0" step="1" />
+          <input v-model.number="seedInput" type="number" min="0" step="1" />
         </label>
-        <button type="button" @click="seed = randomSeed()">隨機一題</button>
+        <button type="button" @click="seedInput = randomSeed()">隨機一題</button>
         <label class="check">
           <input v-model="showSolution" type="checkbox" />
           顯示解答
@@ -46,48 +48,16 @@ const legend = OBJECT_KINDS.map((kind) => ({
       </form>
     </header>
 
-    <div class="layout">
-      <MurdokuBoard
-        :board="puzzle.board"
-        :people="puzzle.people"
-        :victim="puzzle.victim"
-        :murderer="puzzle.murderer"
-        :solution="showSolution ? puzzle.solution : null"
-      />
-
-      <aside class="side">
-        <section class="panel">
-          <h2>線索</h2>
-          <MurdokuClues :puzzle="puzzle" />
-          <p class="note">
-            死者是{{ GENDER_NAMES[puzzle.people[puzzle.victim]!.gender] }}，沒有線索；
-            兇手是唯一與死者同房間的人。
-          </p>
-          <p v-if="showSolution" class="answer">
-            兇手：{{ personLabel(puzzle.murderer, puzzle.victim) }}
-          </p>
-        </section>
-
-        <section class="panel">
-          <h2>物件</h2>
-          <ul class="legend">
-            <li v-for="item in legend" :key="item.kind">
-              {{ item.icon }} {{ item.name }}
-              <small>{{ item.blocking ? "不可站" : "可站" }}</small>
-            </li>
-          </ul>
-        </section>
-
-        <p class="note">
-          {{ puzzle.clues.length }} 條線索，推理 {{ puzzle.steps.length }} 步可解，不需假設。
-        </p>
-      </aside>
-    </div>
+    <MurdokuGame :key="`${size}-${seed}`" :puzzle="puzzle" :show-solution="showSolution" />
 
     <details class="panel">
       <summary>推理步驟（{{ puzzle.steps.length }} 步，會透露解答）</summary>
       <MurdokuSteps :puzzle="puzzle" />
     </details>
+
+    <p class="note">
+      {{ puzzle.clues.length }} 條線索，推理 {{ puzzle.steps.length }} 步可解，不需假設。
+    </p>
   </main>
 </template>
 
@@ -139,24 +109,6 @@ const legend = OBJECT_KINDS.map((kind) => ({
   color: var(--accent);
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 560px) minmax(240px, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-
-@media (max-width: 760px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.side {
-  display: grid;
-  gap: 16px;
-}
-
 .panel {
   display: grid;
   gap: 10px;
@@ -166,34 +118,14 @@ const legend = OBJECT_KINDS.map((kind) => ({
   background: var(--panel);
 }
 
-.legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 6px 12px;
+summary {
+  cursor: pointer;
   color: var(--text-h);
-}
-
-.legend small {
-  color: var(--text);
+  font-weight: 600;
 }
 
 .note {
   margin: 0;
   font-size: 0.875rem;
-}
-
-.answer {
-  margin: 0;
-  font-weight: 700;
-  color: #e02424;
-}
-
-summary {
-  cursor: pointer;
-  color: var(--text-h);
-  font-weight: 600;
 }
 </style>
