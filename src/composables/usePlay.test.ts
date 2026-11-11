@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { generatePuzzle, isStandable } from "../core";
-import { usePlay, type Selection } from "./usePlay";
+import { usePlay, type ProgressStore, type Selection } from "./usePlay";
 
 const puzzle = generatePuzzle({ size: 5, seed: 7 });
 const { board, solution } = puzzle;
@@ -12,8 +12,18 @@ const [free1, free2, free3] = cells.filter((c) => isStandable(board, c)) as [
 ];
 const blocked = cells.find((c) => !isStandable(board, c))!;
 
-function setup() {
-  const play = usePlay(puzzle);
+function memoryStore() {
+  const items = new Map<string, string>();
+  const store: ProgressStore = {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => void items.delete(key),
+  };
+  return { items, store };
+}
+
+function setup(store?: ProgressStore, of = puzzle) {
+  const play = usePlay(of, store);
   /** Press the first cell, drag across the rest, release. */
   const stroke = (choice: Selection, ...path: number[]) => {
     play.selected.value = choice;
@@ -176,4 +186,55 @@ test("flags placed people who share a row or column, or crowd the victim's room"
   const intruder = solution.findIndex((_, person) => person !== victim && person !== murderer);
   fresh.hold(intruder, spare);
   expect(fresh.play.conflicts.value).toEqual(expect.arrayContaining([victim, murderer, intruder]));
+});
+
+test("progress survives a reload of the same puzzle, and only that puzzle", () => {
+  const { items, store } = memoryStore();
+  const first = setup(store);
+  first.stroke(1, free2);
+  first.stroke("empty", free3);
+  first.hold(0, free1);
+  expect(items.size).toBe(1);
+
+  const again = setup(store);
+  expect(again.s()).toEqual(first.s());
+  // history is not kept, so there is nothing to undo straight after a reload
+  expect(again.play.canUndo.value).toBe(false);
+
+  const other = setup(store, generatePuzzle({ size: 5, seed: 8 }));
+  expect(other.play.started.value).toBe(false);
+});
+
+test("undo and restart are saved too, and an empty board leaves nothing behind", () => {
+  const { items, store } = memoryStore();
+  const { play, stroke, hold } = setup(store);
+  hold(0, free1);
+  stroke(1, free2);
+  play.undo();
+  expect(setup(store).s().candidates[free2]).toEqual([]);
+  expect(setup(store).s().positions[0]).toBe(free1);
+
+  play.restart();
+  expect(play.started.value).toBe(false);
+  expect(items.size).toBe(0);
+  play.undo();
+  expect(setup(store).s().positions[0]).toBe(free1);
+});
+
+test("a corrupt or unavailable store just means starting fresh", () => {
+  const { items, store } = memoryStore();
+  setup(store).hold(0, free1);
+  for (const key of items.keys()) items.set(key, "{not json");
+  expect(setup(store).play.started.value).toBe(false);
+
+  const broken: ProgressStore = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error("quota exceeded");
+    },
+    removeItem: () => {},
+  };
+  const { play, hold } = setup(broken);
+  hold(0, free1);
+  expect(play.state.value.positions[0]).toBe(free1);
 });

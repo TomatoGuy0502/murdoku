@@ -17,7 +17,7 @@ import { usePlay } from "../composables/usePlay";
 const props = defineProps<{ puzzle: GeneratedPuzzle; showSolution: boolean }>();
 
 const play = usePlay(props.puzzle);
-const { state, selected, canUndo, conflicts, placedCount, complete, correct } = play;
+const { state, selected, canUndo, started, conflicts, placedCount, complete, correct } = play;
 const accused = shallowRef<number | null>(null);
 
 const name = (person: number) => personLabel(person, props.puzzle.victim);
@@ -116,6 +116,9 @@ const legend = OBJECT_KINDS.map((kind) => ({
           {{ hint?.kind === "next" ? HINT_BUTTON[hintLevel] : "提示" }}
         </button>
         <button type="button" class="mode" :disabled="!canUndo" @click="play.undo()">復原</button>
+        <button type="button" class="mode" :disabled="!started" @click="play.restart()">
+          重來
+        </button>
       </div>
       <p class="hint">{{ usage }}</p>
 
@@ -196,7 +199,7 @@ const legend = OBJECT_KINDS.map((kind) => ({
           @select="selected = $event"
         />
         <p class="note">
-          選一個人、無人或橡皮擦，再點格子。死者是{{
+          選一個人、無人或橡皮擦，再點格子；進度會自動保存。死者是{{
             GENDER_NAMES[puzzle.people[puzzle.victim]!.gender]
           }}； 兇手是唯一與死者同房間的人。
         </p>

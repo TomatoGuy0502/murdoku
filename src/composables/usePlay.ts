@@ -21,14 +21,51 @@ interface Stroke {
   start: number;
 }
 
-/** The player's working state for one puzzle. A cell is placed, pencilled or empty, never two. */
-export function usePlay(puzzle: Puzzle) {
+/** Where progress is kept between visits; `localStorage` in the browser. */
+export type ProgressStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+/** The browser's storage, or nothing where there is none or it is blocked (private mode). */
+function browserStore(): ProgressStore | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The player's working state for one puzzle. A cell is placed, pencilled or empty, never two.
+ * Progress is saved to `store` after every change and picked up again for the same puzzle.
+ */
+export function usePlay(puzzle: Puzzle, store: ProgressStore | undefined = browserStore()) {
   const cellCount = puzzle.board.size ** 2;
-  const state = ref<State>({
+  const blank = JSON.stringify({
     positions: puzzle.people.map(() => null),
     candidates: Array.from({ length: cellCount }, () => []),
     empty: Array.from({ length: cellCount }, () => false),
-  });
+  } satisfies State);
+  // Keyed by the puzzle's own content, so a save can never be applied to a different puzzle.
+  // shortcut: saves are never pruned; add an expiry if storage ever fills up.
+  const key = `murdoku:v1:${JSON.stringify([puzzle.board.rooms, puzzle.board.objects, puzzle.clues])}`;
+
+  function load(): State {
+    try {
+      return JSON.parse(store?.getItem(key) ?? blank);
+    } catch {
+      return JSON.parse(blank);
+    }
+  }
+  function save() {
+    const now = JSON.stringify(state.value);
+    try {
+      if (now === blank) store?.removeItem(key);
+      else store?.setItem(key, now);
+    } catch {
+      // storage full or blocked: playing still works, it just will not survive a reload
+    }
+  }
+
+  const state = ref<State>(load());
   /** Snapshots to undo to, one per stroke that changed something. */
   const history = ref<string[]>([]);
   const selected = shallowRef<Selection>(0);
@@ -104,12 +141,25 @@ export function usePlay(puzzle: Puzzle) {
     if (!stroke) return;
     stroke = null;
     if (history.value.at(-1) === JSON.stringify(state.value)) history.value.pop();
+    else save();
   }
 
   function undo() {
     const last = history.value.pop();
-    if (last) state.value = JSON.parse(last);
+    if (!last) return;
+    state.value = JSON.parse(last);
+    save();
   }
+
+  /** Clear the board. It is one more undo step, so a slip can be taken back. */
+  function restart() {
+    const now = JSON.stringify(state.value);
+    if (now === blank) return;
+    history.value.push(now);
+    state.value = JSON.parse(blank);
+    save();
+  }
+  const started = computed(() => JSON.stringify(state.value) !== blank);
 
   const placedCount = computed(() => state.value.positions.filter((cell) => cell !== null).length);
   const complete = computed(() => placedCount.value === puzzle.people.length);
@@ -146,6 +196,8 @@ export function usePlay(puzzle: Puzzle) {
     strokeHold,
     strokeEnd,
     undo,
+    restart,
+    started,
     canUndo,
     conflicts,
     placedCount,
