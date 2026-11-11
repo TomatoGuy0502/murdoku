@@ -3,6 +3,8 @@ import { defineConfig, lazyPlugins } from "vite-plus";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // relative asset paths, so the build works wherever it is served from (GitHub Pages serves it under /<repo>/)
+  base: "./",
   staged: {
     "*": "vp check --fix",
   },
