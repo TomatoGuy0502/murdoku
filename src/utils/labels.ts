@@ -69,15 +69,35 @@ export function describeClue(clue: Clue, { board, people, victim }: Puzzle): str
   }
 }
 
+const AXIS_NAMES = { row: "列", col: "行" };
+
 /** Why a deduction step could remove candidates. */
 export function describeStep(step: Step, puzzle: Puzzle): string {
-  if (step.clue)
-    return `線索「${personLabel(step.clue.person, puzzle.victim)} ${describeClue(step.clue, puzzle)}」`;
-  if (!step.line) return "死者的房間恰好兩個人";
-  const line = `第 ${step.line.index + 1} ${step.line.axis === "row" ? "列" : "行"}`;
-  if (step.by === undefined) return `${line}只剩這個人能站`;
-  const by = personLabel(step.by, puzzle.victim);
-  return step.rule === "placed"
-    ? `${by} 已確定位置，${line}不能再站人`
-    : `${by} 只可能在${line}，其他人不能在${line}`;
+  const name = (person: number) => personLabel(person, puzzle.victim);
+  const names = (step.group ?? []).map(name).join("、");
+  const line = step.line && `第 ${step.line.index + 1} ${AXIS_NAMES[step.line.axis]}`;
+  const lines =
+    step.lines &&
+    `第 ${step.lines.indexes.map((i) => i + 1).join("、")} ${AXIS_NAMES[step.lines.axis]}`;
+  const room = step.room === undefined ? "" : ROOM_NAMES[puzzle.board.roomKinds[step.room]!];
+  switch (step.rule) {
+    case "placed":
+      return `${name(step.by!)} 已確定位置，${line}不能再站人`;
+    case "confined":
+      return `${name(step.by!)} 只可能在${line}，其他人不能在${line}`;
+    case "lastInLine":
+      return `${line}只剩這個人能站`;
+    case "murder":
+      return "死者的房間恰好兩個人";
+    case "nakedSet":
+      return `${names} 只可能在${lines}，其他人不能在這幾${AXIS_NAMES[step.lines!.axis]}`;
+    case "hiddenSet":
+      return `${lines}只有 ${names} 能站，他們不能在別的${AXIS_NAMES[step.lines!.axis]}`;
+    case "roomCapacity":
+      return `${room}最多只能容納 ${step.count} 人`;
+    case "roomCount":
+      return `${lines}能站的格子全在${room}，所以${room}至少有 ${step.count} 人`;
+    default:
+      return `線索「${name(step.clue!.person)} ${describeClue(step.clue!, puzzle)}」`;
+  }
 }

@@ -1,7 +1,7 @@
 import { generateBoard, isStandable } from "./board";
 import { trueClues } from "./clues";
 import { createRng, range, shuffle, type Rng } from "./rng";
-import { solve, type Step } from "./solver";
+import { MAX_LEVEL, solve, type Step } from "./solver";
 import type { Board, Clue, Person, Puzzle, Solution } from "./types";
 
 export interface GenerateOptions {
@@ -11,6 +11,11 @@ export interface GenerateOptions {
   seed?: number;
   /** Use this board instead of generating one. */
   board?: Board;
+  /**
+   * Hardest deduction technique a solver may need, 2 to `MAX_LEVEL`; see `stepLevel`.
+   * Higher levels let more clues be dropped, so puzzles get harder. Defaults to 3.
+   */
+  maxLevel?: number;
 }
 
 export interface GeneratedPuzzle extends Puzzle {
@@ -19,6 +24,8 @@ export interface GeneratedPuzzle extends Puzzle {
   seed: number;
   /** The deductions that solve the puzzle, in the order the solver made them. */
   steps: Step[];
+  /** The hardest technique those deductions use, at most the `maxLevel` asked for. */
+  level: number;
 }
 
 /** A random placement: one person per row and column, exactly two in the victim's room. */
@@ -49,6 +56,10 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
   const size = options.board?.size ?? options.size ?? 6;
   if (!Number.isInteger(size) || size < 4 || size > 9)
     throw new RangeError(`size must be an integer from 4 to 9, got ${size}`);
+  const maxLevel = options.maxLevel ?? 3;
+  // level 1 has no rule that uses two-person clues, so it cannot always reach a solution
+  if (!Number.isInteger(maxLevel) || maxLevel < 2 || maxLevel > MAX_LEVEL)
+    throw new RangeError(`maxLevel must be an integer from 2 to ${MAX_LEVEL}, got ${maxLevel}`);
   const rng = createRng(seed);
   const victim = size - 1;
   const suspects = range(size - 1);
@@ -59,7 +70,7 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
     const solution = randomSolution(board, victim, rng);
     if (!solution) continue;
     const base = { board, people, victim };
-    const solves = (clues: Clue[]) => solve({ ...base, clues }).solved;
+    const solves = (clues: Clue[]) => solve({ ...base, clues }, { maxLevel }).solved;
 
     // Direction clues go last: they are plentiful and always sufficient, so
     // putting them first would make every puzzle nothing but "A is north of B".
@@ -86,7 +97,8 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
 
     const room = board.rooms[solution[victim]!];
     const murderer = suspects.find((p) => board.rooms[solution[p]!] === room)!;
-    return { ...base, clues, solution, murderer, seed, steps: solve({ ...base, clues }).steps };
+    const { steps, level } = solve({ ...base, clues }, { maxLevel });
+    return { ...base, clues, solution, murderer, seed, steps, level };
   }
   throw new Error("could not generate a puzzle; the given board may leave no valid placement");
 }

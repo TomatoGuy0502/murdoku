@@ -20,7 +20,7 @@ export function nextHint(
   if (wrong.length > 0) return { kind: "wrong", people: wrong };
 
   // replay the deductions still to make and stop at the first person they settle
-  const { steps } = solve(puzzle, positions);
+  const { steps } = solve(puzzle, { known: positions });
   const standable = puzzle.board.rooms.filter((_, cell) => isStandable(puzzle.board, cell)).length;
   const left = positions.map((cell) => (cell === null ? standable : 1));
   for (const [index, step] of steps.entries()) {
