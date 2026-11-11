@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import HelloWorld from "./components/HelloWorld.vue";
+import MurdokuViewer from "./components/murdoku/MurdokuViewer.vue";
 </script>
 
 <template>
-  <HelloWorld />
+  <MurdokuViewer />
 </template>
