@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
-import { BLOCKING_OBJECTS, OBJECT_KINDS, type GeneratedPuzzle } from "../../murdoku";
+import { BLOCKING_OBJECTS, OBJECT_KINDS, nextHint, type GeneratedPuzzle } from "../core";
 import MurdokuBoard from "./MurdokuBoard.vue";
 import MurdokuClues from "./MurdokuClues.vue";
-import { nextHint } from "./hint";
-import { GENDER_NAMES, OBJECT_ICONS, OBJECT_NAMES, cellName, personLabel } from "./labels";
-import { usePlay } from "./usePlay";
+import {
+  GENDER_NAMES,
+  OBJECT_ICONS,
+  OBJECT_NAMES,
+  cellName,
+  describeStep,
+  personLabel,
+} from "../utils/labels";
+import { usePlay } from "../composables/usePlay";
 
 // The parent keys this component by puzzle, so a new puzzle starts from a clean state.
 const props = defineProps<{ puzzle: GeneratedPuzzle; showSolution: boolean }>();
@@ -48,6 +54,11 @@ const hint = computed(() =>
 watch(
   () => state.value.positions.join(),
   () => (hintLevel.value = 0),
+);
+const hintReasons = computed(() =>
+  hint.value?.kind === "next"
+    ? [...new Set(hint.value.reasons.map((step) => describeStep(step, props.puzzle)))]
+    : [],
 );
 function askHint() {
   hintLevel.value = Math.min(hintLevel.value + 1, 3);
@@ -166,7 +177,7 @@ const legend = OBJECT_KINDS.map((kind) => ({
         <template v-else>
           <p>接下來可以確定 {{ name(hint.person) }} 的位置。</p>
           <ol v-if="hintLevel >= 2" class="reasons">
-            <li v-for="reason in hint.reasons" :key="reason">{{ reason }}</li>
+            <li v-for="reason in hintReasons" :key="reason">{{ reason }}</li>
           </ol>
           <p v-if="hintLevel >= 3" class="where">
             {{ name(hint.person) }} 在{{ cellName(puzzle.board.size, hint.cell) }}（盤面上的橘框）。

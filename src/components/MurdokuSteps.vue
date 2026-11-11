@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { GeneratedPuzzle } from "../../murdoku";
-import { isStandable } from "../../murdoku/board";
-import { describeStep, personLabel } from "./labels";
+import { isStandable, type GeneratedPuzzle } from "../core";
+import { describeStep, personLabel } from "../utils/labels";
 
 const props = defineProps<{ puzzle: GeneratedPuzzle }>();
 

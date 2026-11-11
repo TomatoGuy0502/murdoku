@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watchEffect } from "vue";
-import { generatePuzzle } from "../../murdoku";
+import { generatePuzzle } from "../core";
 import MurdokuGame from "./MurdokuGame.vue";
 import MurdokuSteps from "./MurdokuSteps.vue";
 

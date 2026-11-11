@@ -1,4 +1,4 @@
-import type { Clue, Direction, Gender, ObjectKind, Puzzle, RoomKind, Step } from "../../murdoku";
+import type { Clue, Direction, Gender, ObjectKind, Puzzle, RoomKind, Step } from "../core";
 
 export const ROOM_NAMES: Record<RoomKind, string> = {
   kitchen: "廚房",

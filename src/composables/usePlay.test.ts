@@ -1,6 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { generatePuzzle } from "../../murdoku";
-import { isStandable } from "../../murdoku/board";
+import { generatePuzzle, isStandable } from "../core";
 import { usePlay, type Selection } from "./usePlay";
 
 const puzzle = generatePuzzle({ size: 5, seed: 7 });

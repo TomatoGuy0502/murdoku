@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import MurdokuViewer from "./components/murdoku/MurdokuViewer.vue";
+import MurdokuViewer from "./components/MurdokuViewer.vue";
 </script>
 
 <template>

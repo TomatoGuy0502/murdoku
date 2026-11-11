@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { generatePuzzle } from "../../murdoku";
+import { generatePuzzle } from "./index";
 import { nextHint } from "./hint";
 
 test.each([1, 2, 3, 4, 5])("seed %i: following the hints solves the puzzle", (seed) => {

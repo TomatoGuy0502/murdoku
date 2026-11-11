@@ -1,6 +1,5 @@
 import { computed, ref, shallowRef } from "vue";
-import { isValidSolution, type Puzzle } from "../../murdoku";
-import { isStandable } from "../../murdoku/board";
+import { isStandable, isValidSolution, type Puzzle } from "../core";
 
 /** What the player has picked up: a person, the nobody-here mark, or the eraser. */
 export type Selection = number | "empty" | "erase";

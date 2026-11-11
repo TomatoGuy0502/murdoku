@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Puzzle } from "../../murdoku";
-import { describeClue, personLabel } from "./labels";
+import type { Puzzle } from "../core";
+import { describeClue, personLabel } from "../utils/labels";
 
 const props = defineProps<{
   puzzle: Puzzle;

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import type { Board, ObjectKind, Person } from "../../murdoku";
-import { isStandable } from "../../murdoku/board";
-import { OBJECT_ICONS, OBJECT_NAMES, ROOM_NAMES, personLabel } from "./labels";
+import { isStandable, type Board, type ObjectKind, type Person } from "../core";
+import { OBJECT_ICONS, OBJECT_NAMES, ROOM_NAMES, personLabel } from "../utils/labels";
 
 const props = defineProps<{
   board: Board;
