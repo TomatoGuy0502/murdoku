@@ -46,16 +46,16 @@ test("same seed gives the same puzzle", () => {
   expect(generatePuzzle({ seed: 42 })).not.toEqual(generatePuzzle({ seed: 43 }));
 });
 
-test("sizes 7 to 9 generate and solve", () => {
-  for (const size of [7, 8, 9]) {
+test("sizes 7 to 10 generate and solve", () => {
+  for (const size of [7, 8, 9, 10]) {
     const puzzle = generatePuzzle({ size, seed: size });
     expect(solve(puzzle).solution).toEqual(puzzle.solution);
   }
 });
 
-test("rejects sizes outside 4 to 9", () => {
+test("rejects sizes outside 4 to 10", () => {
   expect(() => generatePuzzle({ size: 3 })).toThrow(RangeError);
-  expect(() => generatePuzzle({ size: 10 })).toThrow(RangeError);
+  expect(() => generatePuzzle({ size: 11 })).toThrow(RangeError);
 });
 
 // The deduction rules must never rule out a real solution, even when the

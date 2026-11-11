@@ -4,8 +4,12 @@ import { createRng, range, shuffle, type Rng } from "./rng";
 import { MAX_LEVEL, solve, type Step } from "./solver";
 import type { Board, Clue, Person, Puzzle, Solution } from "./types";
 
+export const MIN_SIZE = 4;
+/** Above this a board needs more rooms than there are room names. */
+export const MAX_SIZE = 10;
+
 export interface GenerateOptions {
-  /** 4 to 9, default 6. Ignored when `board` is given. */
+  /** `MIN_SIZE` to `MAX_SIZE`, default 6. Ignored when `board` is given. */
   size?: number;
   /** Same seed (and board), same puzzle. Defaults to the current time. */
   seed?: number;
@@ -56,8 +60,8 @@ function randomSolution(board: Board, victim: number, rng: Rng): Solution | null
 export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
   const seed = options.seed ?? Date.now();
   const size = options.board?.size ?? options.size ?? 6;
-  if (!Number.isInteger(size) || size < 4 || size > 9)
-    throw new RangeError(`size must be an integer from 4 to 9, got ${size}`);
+  if (!Number.isInteger(size) || size < MIN_SIZE || size > MAX_SIZE)
+    throw new RangeError(`size must be an integer from ${MIN_SIZE} to ${MAX_SIZE}, got ${size}`);
   const maxLevel = options.maxLevel ?? 3;
   // level 1 has no rule that uses two-person clues, so it cannot always reach a solution
   if (!Number.isInteger(maxLevel) || maxLevel < 2 || maxLevel > MAX_LEVEL)

@@ -70,7 +70,7 @@ const cells = computed(() => {
   const { size, rooms, roomKinds, objects } = props.board;
   // Each person owns one slot on the rim of a cell, so the middle stays free for the object.
   // The rim is 3 rows of `rimCols`; slots fill the bottom row, then the sides, then the top.
-  const rimCols = props.people.length > 8 ? 4 : 3;
+  const rimCols = Math.max(3, Math.ceil((props.people.length - 2) / 2));
   const slot = (person: number) =>
     person < rimCols
       ? { gridRow: 3, gridColumn: person + 1 }
@@ -269,7 +269,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 .board {
   position: relative;
   display: grid;
-  width: min(100%, 560px);
+  width: 100%;
   /* a drag on the board paints cells instead of scrolling the page */
   touch-action: none;
   user-select: none;
@@ -350,14 +350,16 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   /* clear of the wall drawn over the cell's edge */
   top: 6px;
   left: 7px;
-  font-size: 0.65rem;
+  font-size: clamp(8px, 12cqw, 13px);
   line-height: 1;
   font-weight: 600;
   opacity: 0.75;
 }
 
+/* Everything inside a cell is sized in cqw, a share of the cell's width, so it keeps
+   its proportions from a roomy 4×4 down to a tight 10×10. */
 .object {
-  font-size: 1.6rem;
+  font-size: 34cqw;
   line-height: 1;
 }
 
@@ -386,7 +388,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   aspect-ratio: 1;
   border-radius: 50%;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 24cqw;
   color: #fff;
   z-index: 1;
 }
@@ -404,7 +406,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 }
 
 .person.victim {
-  font-size: 0.7rem;
+  font-size: 18cqw;
 }
 
 .person.murderer {
@@ -456,7 +458,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   aspect-ratio: 1;
   border-radius: 50%;
   color: #fff;
-  font-size: clamp(7px, 13cqw, 12px);
+  font-size: clamp(7px, 13cqw, 16px);
   font-weight: 700;
   line-height: 1;
 }

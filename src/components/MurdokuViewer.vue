@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watchEffect } from "vue";
 import { usePuzzle } from "../composables/usePuzzle";
+import { MAX_SIZE, MIN_SIZE } from "../core";
 import MurdokuGame from "./MurdokuGame.vue";
 import MurdokuSteps from "./MurdokuSteps.vue";
 
-const SIZES = [4, 5, 6, 7, 8, 9];
+const SIZES = Array.from({ length: MAX_SIZE - MIN_SIZE + 1 }, (_, i) => MIN_SIZE + i);
 // A difficulty is the range of deduction levels a puzzle must need; see `stepLevel` in core.
 const DIFFICULTIES = [
   { value: "easy", label: "簡單", minLevel: 1, maxLevel: 2 },
@@ -94,7 +95,7 @@ watchEffect(() =>
 
 <style scoped>
 .viewer {
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 24px 16px 48px;
   display: grid;

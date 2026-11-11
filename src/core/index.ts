@@ -13,4 +13,10 @@ export {
 } from "./solver";
 export { bruteForceSolutions, countSolutions } from "./bruteForce";
 export { nextHint, type Hint } from "./hint";
-export { generatePuzzle, type GeneratedPuzzle, type GenerateOptions } from "./generator";
+export {
+  MAX_SIZE,
+  MIN_SIZE,
+  generatePuzzle,
+  type GeneratedPuzzle,
+  type GenerateOptions,
+} from "./generator";

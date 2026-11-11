@@ -220,8 +220,11 @@ const legend = OBJECT_KINDS.map((kind) => ({
 
 <style scoped>
 .layout {
+  /* The board is a square as tall as the window allows once the header, the tool row
+     above it and the status line below it have their room; never smaller than 320px. */
+  --board: max(320px, calc(100dvh - 18rem));
   display: grid;
-  grid-template-columns: minmax(0, 560px) minmax(240px, 1fr);
+  grid-template-columns: minmax(0, var(--board)) minmax(260px, 1fr);
   gap: 24px;
   align-items: start;
 }
