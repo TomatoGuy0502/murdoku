@@ -230,12 +230,10 @@ const legend = [
 
 <style scoped>
 .layout {
-  /* The plan is a square as tall as the window allows once the masthead, the tools
-     above it and the status line below it have their room; never smaller than 320px. */
-  --board: max(320px, calc(100dvh - 19rem));
   display: grid;
-  grid-template-columns: minmax(0, var(--board)) minmax(260px, 1fr);
-  gap: 20px 40px;
+  /* plan to clues is 3:2; the page's own width keeps the plan from outgrowing the window */
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px var(--gutter);
   align-items: start;
 }
 

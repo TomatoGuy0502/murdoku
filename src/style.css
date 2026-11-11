@@ -31,6 +31,11 @@
 
   --sans: system-ui, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
 
+  /* The plan is a square as tall as the window allows once the masthead, the tools
+     above it and the status line below it have their room; never smaller than 320px. */
+  --plan: max(320px, calc(100dvh - 19rem));
+  --gutter: 40px;
+
   color-scheme: light;
   font: 16px/1.5 var(--sans);
   color: var(--ink-soft);

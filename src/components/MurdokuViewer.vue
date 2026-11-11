@@ -111,7 +111,9 @@ watchEffect(() =>
 
 <style scoped>
 .page {
-  max-width: 1280px;
+  /* Wide enough for the plan at its largest plus the clue column at two thirds of it.
+     On a narrower window the two simply share what there is, still 3:2. */
+  max-width: calc(var(--plan) * 5 / 3 + var(--gutter));
   margin: 0 auto;
   padding: 20px 16px 48px;
   display: grid;
