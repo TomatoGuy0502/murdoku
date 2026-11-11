@@ -90,8 +90,13 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
 
     const clues = suspects.map((p) => ordered.find((c) => c.person === p)!);
     const rest = ordered.filter((c) => !clues.includes(c));
-    while (rest.length > 0 && !solves(clues)) clues.push(rest.shift()!);
-    if (!solves(clues)) continue;
+    // each added clue only narrows things further, so carry the candidates forward
+    let reached = solve({ ...base, clues }, { maxLevel });
+    while (rest.length > 0 && !reached.solved) {
+      clues.push(rest.shift()!);
+      reached = solve({ ...base, clues }, { maxLevel, from: reached.candidates });
+    }
+    if (!reached.solved) continue;
 
     // drop redundant clues, newest first, keeping at least one per suspect
     for (const clue of [...clues].reverse()) {

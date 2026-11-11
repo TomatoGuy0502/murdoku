@@ -1,7 +1,14 @@
 import { isBeside, isStandable } from "./board";
-import { isValidSolution, related } from "./clues";
+import { isValidSolution } from "./clues";
 import { range } from "./rng";
-import type { Clue, Puzzle, Solution } from "./types";
+import {
+  OBJECT_KINDS,
+  type Board,
+  type Clue,
+  type ObjectKind,
+  type Puzzle,
+  type Solution,
+} from "./types";
 
 /**
  * Which deduction removed candidates: a clue type, or one of the board rules.
@@ -84,6 +91,12 @@ export interface SolveOptions {
   known?: (number | null)[];
   /** Hardest technique allowed, 1 to `MAX_LEVEL`. Defaults to all of them. */
   maxLevel?: number;
+  /**
+   * Candidates to start from instead of every standable cell: the `candidates` of an
+   * earlier solve of the same puzzle with fewer clues. Deduction only ever removes
+   * candidates, so picking up from there reaches the same result with less work.
+   */
+  from?: number[][];
 }
 
 export interface SolveResult {
@@ -105,6 +118,73 @@ function combinations<T>(items: T[], k: number): T[][] {
 }
 
 /**
+ * A set of cells as one bitmask of columns per row. Deduction is almost all set
+ * intersection and counting, which this turns into a handful of integer operations.
+ */
+type Grid = Uint16Array;
+
+function popcount(bits: number): number {
+  let n = 0;
+  for (; bits; bits &= bits - 1) n++;
+  return n;
+}
+
+function bitsOf(bits: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; bits; i++, bits >>>= 1) if (bits & 1) out.push(i);
+  return out;
+}
+
+/** Cell sets that depend only on the board, worked out once per board. */
+interface Tables {
+  /** A full row: one bit per column. */
+  all: number;
+  standable: Grid;
+  rooms: Grid[];
+  notRooms: Grid[];
+  objects: Map<ObjectKind, Grid>;
+  beside: Map<ObjectKind, Grid>;
+}
+
+// A board is never changed after it is made, so its tables can be reused across solves.
+const tableCache = new WeakMap<Board, Tables>();
+
+function tablesFor(board: Board): Tables {
+  const cached = tableCache.get(board);
+  if (cached) return cached;
+  const { size, rooms } = board;
+  const all = (1 << size) - 1;
+  const grid = (ok: (cell: number) => boolean) => {
+    const g = new Uint16Array(size);
+    for (let cell = 0; cell < size * size; cell++)
+      if (ok(cell)) g[Math.floor(cell / size)]! |= 1 << (cell % size);
+    return g;
+  };
+  const roomGrids = range(Math.max(...rooms) + 1).map((room) => grid((c) => rooms[c] === room));
+  const tables: Tables = {
+    all,
+    standable: grid((c) => isStandable(board, c)),
+    rooms: roomGrids,
+    notRooms: roomGrids.map((g) => g.map((row) => all & ~row)),
+    objects: new Map(OBJECT_KINDS.map((kind) => [kind, grid((c) => board.objects[c] === kind)])),
+    beside: new Map(OBJECT_KINDS.map((kind) => [kind, grid((c) => isBeside(board, c, kind))])),
+  };
+  tableCache.set(board, tables);
+  return tables;
+}
+
+/** Where the other person of a two-person clue must be, seen from one of them. */
+type Where = "room" | "above" | "below" | "left" | "right";
+
+/** For "`person` is `direction` of `other`": where `other` is from `person`, and the reverse. */
+const OPPOSITE: Record<Extract<Clue, { type: "direction" }>["direction"], [Where, Where]> = {
+  north: ["below", "above"],
+  south: ["above", "below"],
+  west: ["right", "left"],
+  east: ["left", "right"],
+};
+
+/**
  * Solves by constraint propagation only: every rule removes candidates that are
  * impossible given the current candidates, and rules repeat until nothing changes.
  * No rule ever assumes a placement, so `solved` means solvable without guessing
@@ -116,66 +196,162 @@ function combinations<T>(items: T[], k: number): T[][] {
  */
 export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   const { board, people, victim, clues } = puzzle;
-  const { known = [], maxLevel = MAX_LEVEL } = options;
+  const { known = [], maxLevel = MAX_LEVEL, from } = options;
   const { size, rooms } = board;
+  const tables = tablesFor(board);
+  const { all } = tables;
   const everyone = range(people.length);
-  const standable = range(size * size).filter((c) => isStandable(board, c));
-  const cand = everyone.map((p) => {
+  const roomIds = range(tables.rooms.length);
+
+  const none = () => new Uint16Array(size);
+  const toGrid = (cells: number[]) => {
+    const g = none();
+    for (const c of cells) g[Math.floor(c / size)]! |= 1 << (c % size);
+    return g;
+  };
+  const cellsOf = (g: Grid) => {
+    const out: number[] = [];
+    for (let r = 0; r < size; r++)
+      for (let c = 0; c < size; c++) if (g[r]! & (1 << c)) out.push(r * size + c);
+    return out;
+  };
+  const count = (g: Grid) => {
+    let n = 0;
+    for (let r = 0; r < size; r++) n += popcount(g[r]!);
+    return n;
+  };
+  const hits = (a: Grid, b: Grid) => {
+    for (let r = 0; r < size; r++) if (a[r]! & b[r]!) return true;
+    return false;
+  };
+  const add = (into: Grid, g: Grid) => {
+    for (let r = 0; r < size; r++) into[r]! |= g[r]!;
+  };
+  /** Which rows a set touches, as bits. */
+  const rowBits = (g: Grid) => {
+    let bits = 0;
+    for (let r = 0; r < size; r++) if (g[r]) bits |= 1 << r;
+    return bits;
+  };
+  /** Which columns a set touches, as bits. */
+  const colBits = (g: Grid) => {
+    let bits = 0;
+    for (let r = 0; r < size; r++) bits |= g[r]!;
+    return bits;
+  };
+  const axes = [
+    ["row", rowBits],
+    ["col", colBits],
+  ] as const;
+  /** Every cell on the rows (or columns) whose bits are set. */
+  const linesGrid = (axis: Axis, bits: number) => {
+    const g = none();
+    for (let r = 0; r < size; r++) g[r] = axis === "col" ? bits : bits & (1 << r) ? all : 0;
+    return g;
+  };
+
+  const cand: Grid[] = everyone.map((p) => {
     const cell = known[p];
-    return new Set(cell == null ? standable : [cell]);
+    if (cell != null) return toGrid([cell]);
+    return from?.[p] ? toGrid(from[p]) : tables.standable.slice();
   });
   const steps: Step[] = [];
-  const axes = [
-    ["row", (c: number) => Math.floor(c / size)],
-    ["col", (c: number) => c % size],
-  ] as const;
 
+  /** Restrict a person to the cells in `ok`, recording what that removed. */
   const keep = (
     rule: Rule,
     person: number,
-    ok: (cell: number) => boolean,
+    ok: Grid,
     detail?: Omit<Step, "rule" | "person" | "removed">,
   ) => {
-    const removed = [...cand[person]!].filter((c) => !ok(c));
-    if (removed.length === 0) return;
-    for (const c of removed) cand[person]!.delete(c);
-    steps.push({ rule, person, removed, ...detail });
+    const mine = cand[person]!;
+    let removed: number[] | undefined;
+    for (let r = 0; r < size; r++) {
+      const gone = mine[r]! & ~ok[r]!;
+      if (!gone) continue;
+      mine[r]! &= ok[r]!;
+      removed ??= [];
+      for (let c = 0; c < size; c++) if (gone & (1 << c)) removed.push(r * size + c);
+    }
+    if (removed) steps.push({ rule, person, removed, ...detail });
   };
   const others = (p: number) => everyone.filter((q) => q !== p);
-  const canBeIn = (p: number, room: number) => [...cand[p]!].some((c) => rooms[c] === room);
+  const canBeIn = (p: number, room: number) => hits(cand[p]!, tables.rooms[room]!);
   /** The room a person is certainly in, if their candidates agree on one. */
   const knownRoom = (p: number) => {
-    const set = new Set([...cand[p]!].map((c) => rooms[c]!));
-    return set.size === 1 ? [...set][0] : undefined;
+    let found: number | undefined;
+    for (const room of roomIds) {
+      if (!canBeIn(p, room)) continue;
+      if (found !== undefined) return undefined;
+      found = room;
+    }
+    return found;
   };
-  const linesOf = (p: number, line: (c: number) => number) => new Set([...cand[p]!].map(line));
+  /** The cells of every room that passes `test`. */
+  const roomsWhere = (test: (room: number) => boolean) => {
+    const g = none();
+    for (const room of roomIds) if (test(room)) add(g, tables.rooms[room]!);
+    return g;
+  };
+  /** Every cell somebody could still be on. */
+  const openCells = () => {
+    const g = none();
+    for (const mine of cand) add(g, mine);
+    return g;
+  };
+
+  /** The cells of `own` from which `partner` still has a cell lying `where`, in another row and column. */
+  const supported = (own: Grid, partner: Grid, where: Where) => {
+    const ok = none();
+    for (let r = 0; r < size; r++)
+      for (let c = 0; c < size; c++) {
+        const bit = 1 << c;
+        if (!(own[r]! & bit)) continue;
+        const cols =
+          where === "left" ? bit - 1 : where === "right" ? all & ~(bit | (bit - 1)) : all & ~bit;
+        const room = where === "room" ? tables.rooms[rooms[r * size + c]!]! : undefined;
+        for (let r2 = 0; r2 < size; r2++) {
+          if (r2 === r || (where === "above" && r2 > r) || (where === "below" && r2 < r)) continue;
+          if (partner[r2]! & cols & (room ? room[r2]! : all)) {
+            ok[r]! |= bit;
+            break;
+          }
+        }
+      }
+    return ok;
+  };
 
   /** `p` shares a room with nobody in `group`. */
   const exclusive = (clue: Clue, p: number, group: number[]) => {
-    keep(clue.type, p, (c) => !group.some((q) => knownRoom(q) === rooms[c]), { clue });
+    const taken = group.map(knownRoom);
+    keep(
+      clue.type,
+      p,
+      roomsWhere((room) => !taken.includes(room)),
+      { clue },
+    );
     const room = knownRoom(p);
     if (room !== undefined)
-      for (const q of group) keep(clue.type, q, (c) => rooms[c] !== room, { clue });
+      for (const q of group) keep(clue.type, q, tables.notRooms[room]!, { clue });
   };
 
   const applyClue = (clue: Clue) => {
     const p = clue.person;
     switch (clue.type) {
       case "inRoom":
-        return keep(clue.type, p, (c) => rooms[c] === clue.room, { clue });
+        return keep(clue.type, p, tables.rooms[clue.room] ?? none(), { clue });
       case "on":
-        return keep(clue.type, p, (c) => board.objects[c] === clue.object, { clue });
+        return keep(clue.type, p, tables.objects.get(clue.object)!, { clue });
       case "beside":
-        return keep(clue.type, p, (c) => isBeside(board, c, clue.object), { clue });
+        return keep(clue.type, p, tables.beside.get(clue.object)!, { clue });
       case "withPerson":
       case "direction": {
         // a cell survives only if the other person still has a compatible cell
-        const fits = (a: number, b: number) =>
-          Math.floor(a / size) !== Math.floor(b / size) &&
-          a % size !== b % size &&
-          related(board, clue, a, b);
-        keep(clue.type, p, (a) => [...cand[clue.other]!].some((b) => fits(a, b)), { clue });
-        keep(clue.type, clue.other, (b) => [...cand[p]!].some((a) => fits(a, b)), { clue });
+        const [mine, theirs] =
+          clue.type === "withPerson" ? (["room", "room"] as const) : OPPOSITE[clue.direction];
+        const o = clue.other;
+        keep(clue.type, p, supported(cand[p]!, cand[o]!, mine), { clue });
+        keep(clue.type, o, supported(cand[o]!, cand[p]!, theirs), { clue });
         return;
       }
       case "alone":
@@ -188,64 +364,66 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
         );
       case "withGender": {
         const mates = others(p).filter((q) => people[q]!.gender === clue.gender);
-        keep(clue.type, p, (c) => mates.some((q) => canBeIn(q, rooms[c]!)), { clue });
+        keep(
+          clue.type,
+          p,
+          roomsWhere((room) => mates.some((q) => canBeIn(q, room))),
+          { clue },
+        );
         const room = knownRoom(p);
         if (room === undefined) return;
         const able = mates.filter((q) => canBeIn(q, room));
-        if (able.length === 1) keep(clue.type, able[0]!, (c) => rooms[c] === room, { clue });
+        if (able.length === 1) keep(clue.type, able[0]!, tables.rooms[room]!, { clue });
       }
     }
   };
 
   /** placed (their cell is known) or confined (only their row/column is): nobody else is on that line. */
   const applyOwnedLines = (rule: "placed" | "confined") => {
-    for (const [axis, line] of axes)
+    for (const [axis, lineBits] of axes)
       for (const p of everyone) {
-        const lines = linesOf(p, line);
-        if (lines.size !== 1 || (cand[p]!.size === 1) !== (rule === "placed")) continue;
-        const index = [...lines][0]!;
-        for (const q of others(p))
-          keep(rule, q, (c) => line(c) !== index, { by: p, line: { axis, index } });
+        const bits = lineBits(cand[p]!);
+        if (popcount(bits) !== 1 || (count(cand[p]!) === 1) !== (rule === "placed")) continue;
+        const detail = { by: p, line: { axis, index: bitsOf(bits)[0]! } };
+        const ok = linesGrid(axis, all & ~bits);
+        for (const q of others(p)) keep(rule, q, ok, detail);
       }
   };
 
   const applyLastInLine = () => {
-    for (const [axis, line] of axes)
+    for (const [axis, lineBits] of axes)
       for (const index of range(size)) {
-        const able = everyone.filter((p) => linesOf(p, line).has(index));
+        const able = everyone.filter((p) => lineBits(cand[p]!) & (1 << index));
         if (able.length === 1)
-          keep("lastInLine", able[0]!, (c) => line(c) === index, { line: { axis, index } });
+          keep("lastInLine", able[0]!, linesGrid(axis, 1 << index), { line: { axis, index } });
       }
   };
 
   /** k people who between them can only be on k lines fill those lines. */
   const applyNakedSets = (k: number) => {
-    for (const [axis, line] of axes) {
-      const open = everyone.filter((p) => linesOf(p, line).size > 1);
+    for (const [axis, lineBits] of axes) {
+      const open = everyone.filter((p) => popcount(lineBits(cand[p]!)) > 1);
       for (const group of combinations(open, k)) {
-        const indexes = [...new Set(group.flatMap((p) => [...linesOf(p, line)]))];
-        if (indexes.length !== k) continue;
-        for (const q of everyone)
-          if (!group.includes(q))
-            keep("nakedSet", q, (c) => !indexes.includes(line(c)), {
-              group,
-              lines: { axis, indexes: indexes.sort((a, b) => a - b) },
-            });
+        let bits = 0;
+        for (const p of group) bits |= lineBits(cand[p]!);
+        if (popcount(bits) !== k) continue;
+        const detail = { group, lines: { axis, indexes: bitsOf(bits) } };
+        const ok = linesGrid(axis, all & ~bits);
+        for (const q of everyone) if (!group.includes(q)) keep("nakedSet", q, ok, detail);
       }
     }
   };
 
   /** k lines that only k people can be on take all of those people. */
   const applyHiddenSets = (k: number) => {
-    for (const [axis, line] of axes)
+    for (const [axis, lineBits] of axes)
       for (const indexes of combinations(range(size), k)) {
-        const group = everyone.filter((p) => indexes.some((i) => linesOf(p, line).has(i)));
+        let bits = 0;
+        for (const i of indexes) bits |= 1 << i;
+        const group = everyone.filter((p) => lineBits(cand[p]!) & bits);
         if (group.length !== k) continue;
-        for (const p of group)
-          keep("hiddenSet", p, (c) => indexes.includes(line(c)), {
-            group,
-            lines: { axis, indexes },
-          });
+        const ok = linesGrid(axis, bits);
+        for (const p of group) keep("hiddenSet", p, ok, { group, lines: { axis, indexes } });
       }
   };
 
@@ -254,17 +432,19 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     keep(
       "murder",
       victim,
-      (c) =>
-        suspects.some((q) => canBeIn(q, rooms[c]!)) &&
-        suspects.filter((q) => knownRoom(q) === rooms[c]).length < 2,
+      roomsWhere(
+        (room) =>
+          suspects.some((q) => canBeIn(q, room)) &&
+          suspects.filter((q) => knownRoom(q) === room).length < 2,
+      ),
     );
     const room = knownRoom(victim);
     if (room === undefined) return;
     const able = suspects.filter((q) => canBeIn(q, room));
-    if (able.length === 1) keep("murder", able[0]!, (c) => rooms[c] === room);
+    if (able.length === 1) keep("murder", able[0]!, tables.rooms[room]!);
     const sure = suspects.filter((q) => knownRoom(q) === room);
     if (sure.length === 1)
-      for (const q of suspects) if (q !== sure[0]) keep("murder", q, (c) => rooms[c] !== room);
+      for (const q of suspects) if (q !== sure[0]) keep("murder", q, tables.notRooms[room]!);
   };
 
   const loners = clues.flatMap((clue) => (clue.type === "alone" ? [clue.person] : []));
@@ -276,18 +456,20 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
         ? [clue.person]
         : [],
   );
-  const roomIds = range(board.roomKinds.length);
-  /** Every cell somebody could still be on. */
-  const openCells = () => [...new Set(cand.flatMap((set) => [...set]))];
 
   /** People known to be in `room`, and the most it can hold: one per row and per column it still offers. */
   const roomLimit = (room: number) => {
-    const cells = openCells().filter((c) => rooms[c] === room);
+    const open = openCells();
+    const inRoom = tables.rooms[room]!;
+    let rowCount = 0;
+    let cols = 0;
+    for (let r = 0; r < size; r++) {
+      const here = open[r]! & inRoom[r]!;
+      if (here) rowCount++;
+      cols |= here;
+    }
     const sure = everyone.filter((p) => knownRoom(p) === room);
-    let cap = Math.min(
-      everyone.filter((p) => canBeIn(p, room)).length,
-      ...axes.map(([, line]) => new Set(cells.map(line)).size),
-    );
+    let cap = Math.min(everyone.filter((p) => canBeIn(p, room)).length, rowCount, popcount(cols));
     if (sure.includes(victim)) cap = Math.min(cap, 2);
     if (sure.some((p) => loners.includes(p))) cap = Math.min(cap, 1);
     return { sure, cap };
@@ -297,7 +479,7 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     for (const room of roomIds) {
       const { sure, cap } = roomLimit(room);
       const detail = { room, count: cap };
-      const notHere = (c: number) => rooms[c] !== room;
+      const notHere = tables.notRooms[room]!;
       // too small for the victim and murderer, or for anyone who has company
       if (cap < 2) for (const p of [victim, ...paired]) keep("roomCapacity", p, notHere, detail);
       // already full
@@ -309,28 +491,38 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   const applyRoomCount = () => {
     for (const room of roomIds) {
       const { cap } = roomLimit(room);
-      for (const [axis, line] of axes) {
+      const inRoom = tables.rooms[room]!;
+      const notHere = tables.notRooms[room]!;
+      for (const [axis] of axes) {
         // lines whose every open cell is in this room: whoever is on them is in the room
         const open = openCells();
-        const indexes = range(size).filter((i) => {
-          const cells = open.filter((c) => line(c) === i);
-          return cells.length > 0 && cells.every((c) => rooms[c] === room);
-        });
-        if (indexes.length === 0) continue;
+        let bits = 0;
+        if (axis === "row") {
+          for (let r = 0; r < size; r++) if (open[r] && !(open[r]! & ~inRoom[r]!)) bits |= 1 << r;
+        } else {
+          let outside = 0;
+          for (let r = 0; r < size; r++) outside |= open[r]! & ~inRoom[r]!;
+          bits = colBits(open) & ~outside;
+        }
+        if (bits === 0) continue;
+        const indexes = bitsOf(bits);
         const detail = { room, count: indexes.length, lines: { axis, indexes } };
-        const notHere = (c: number) => rooms[c] !== room;
         if (indexes.length >= 2) for (const p of loners) keep("roomCount", p, notHere, detail);
         if (indexes.length >= 3) keep("roomCount", victim, notHere, detail);
         // as many forced in as the room can hold: they are its only occupants
-        if (indexes.length === cap)
-          for (const p of everyone)
-            keep("roomCount", p, (c) => notHere(c) || indexes.includes(line(c)), detail);
+        if (indexes.length === cap) {
+          const ok = linesGrid(axis, bits);
+          add(ok, notHere);
+          for (const p of everyone) keep("roomCount", p, ok, detail);
+        }
       }
     }
   };
 
-  const cluesAt = (level: number) => () =>
-    clues.filter((clue) => stepLevel({ rule: clue.type }) === level).forEach(applyClue);
+  const cluesAt = (level: number) => {
+    const mine = clues.filter((clue) => stepLevel({ rule: clue.type }) === level);
+    return () => mine.forEach(applyClue);
+  };
   const levels: (() => void)[][] = [
     [cluesAt(1), () => applyOwnedLines("placed")],
     [cluesAt(2), applyLastInLine],
@@ -346,11 +538,12 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
       for (const rule of rules) rule();
       return steps.length > before;
     });
-  while (cand.every((set) => set.size > 0) && progress());
+  while (cand.every((mine) => rowBits(mine) !== 0) && progress());
 
-  const candidates = cand.map((set) => [...set]);
+  const candidates = cand.map(cellsOf);
   const solution = candidates.map((cells) => cells[0]!);
-  const solved = cand.every((set) => set.size === 1) && isValidSolution(puzzle, solution);
+  const solved =
+    candidates.every((cells) => cells.length === 1) && isValidSolution(puzzle, solution);
   return {
     solved,
     solution: solved ? solution : null,
