@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed, shallowRef, watchEffect } from "vue";
-import { generatePuzzle } from "../core";
+import { usePuzzle } from "../composables/usePuzzle";
 import MurdokuGame from "./MurdokuGame.vue";
 import MurdokuSteps from "./MurdokuSteps.vue";
 
 const SIZES = [4, 5, 6, 7, 8, 9];
+// A difficulty is the range of deduction levels a puzzle must need; see `stepLevel` in core.
+const DIFFICULTIES = [
+  { value: "easy", label: "簡單", minLevel: 1, maxLevel: 2 },
+  { value: "normal", label: "普通", minLevel: 3, maxLevel: 3 },
+  { value: "hard", label: "困難", minLevel: 4, maxLevel: 5 },
+] as const;
+type Difficulty = (typeof DIFFICULTIES)[number]["value"];
 const randomSeed = () => Math.floor(Math.random() * 1_000_000);
 
 // The puzzle lives in the URL so a reload or a shared link gives the same one.
@@ -16,13 +23,25 @@ const size = shallowRef(SIZES.includes(urlSize) ? urlSize : 6);
 const seedInput = shallowRef<number | "">(
   Number.isInteger(urlSeed) && urlSeed >= 0 ? urlSeed : randomSeed(),
 );
+const difficulty = shallowRef<Difficulty>(
+  DIFFICULTIES.find((d) => d.value === params.get("difficulty"))?.value ?? "normal",
+);
 const showSolution = shallowRef(false);
 
 // an emptied number input yields ""
 const seed = computed(() => seedInput.value || 0);
-const puzzle = computed(() => generatePuzzle({ size: size.value, seed: seed.value }));
+const { puzzle, version, loading, error } = usePuzzle(() => {
+  const { minLevel, maxLevel } = DIFFICULTIES.find((d) => d.value === difficulty.value)!;
+  return { size: size.value, seed: seed.value, minLevel, maxLevel };
+});
 
-watchEffect(() => history.replaceState(null, "", `?size=${size.value}&seed=${seed.value}`));
+watchEffect(() =>
+  history.replaceState(
+    null,
+    "",
+    `?size=${size.value}&difficulty=${difficulty.value}&seed=${seed.value}`,
+  ),
+);
 </script>
 
 <template>
@@ -37,6 +56,12 @@ watchEffect(() => history.replaceState(null, "", `?size=${size.value}&seed=${see
           </select>
         </label>
         <label>
+          難度
+          <select v-model="difficulty">
+            <option v-for="d in DIFFICULTIES" :key="d.value" :value="d.value">{{ d.label }}</option>
+          </select>
+        </label>
+        <label>
           Seed
           <input v-model.number="seedInput" type="number" min="0" step="1" />
         </label>
@@ -45,19 +70,25 @@ watchEffect(() => history.replaceState(null, "", `?size=${size.value}&seed=${see
           <input v-model="showSolution" type="checkbox" />
           顯示解答
         </label>
+        <span v-if="loading" class="busy" role="status">出題中…</span>
       </form>
     </header>
 
-    <MurdokuGame :key="`${size}-${seed}`" :puzzle="puzzle" :show-solution="showSolution" />
+    <p v-if="error" class="error" role="alert">出題失敗：{{ error }}</p>
 
-    <details class="panel">
-      <summary>推理步驟（{{ puzzle.steps.length }} 步，會透露解答）</summary>
-      <MurdokuSteps :puzzle="puzzle" />
-    </details>
+    <div v-if="puzzle" class="puzzle" :class="{ stale: loading }">
+      <MurdokuGame :key="version" :puzzle="puzzle" :show-solution="showSolution" />
 
-    <p class="note">
-      {{ puzzle.clues.length }} 條線索，推理 {{ puzzle.steps.length }} 步可解，不需假設。
-    </p>
+      <details class="panel">
+        <summary>推理步驟（{{ puzzle.steps.length }} 步，會透露解答）</summary>
+        <MurdokuSteps :puzzle="puzzle" />
+      </details>
+
+      <p class="note">
+        {{ puzzle.clues.length }} 條線索，推理
+        {{ puzzle.steps.length }} 步可解，不需假設；最難的一步是第 {{ puzzle.level }} 級推理。
+      </p>
+    </div>
   </main>
 </template>
 
@@ -107,6 +138,26 @@ watchEffect(() => history.replaceState(null, "", `?size=${size.value}&seed=${see
   cursor: pointer;
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.busy {
+  font-size: 0.875rem;
+}
+
+.error {
+  margin: 0;
+  color: #e02424;
+}
+
+.puzzle {
+  display: grid;
+  gap: 24px;
+}
+
+/* the puzzle on screen is about to be replaced */
+.puzzle.stale {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .panel {

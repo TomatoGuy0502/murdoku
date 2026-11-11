@@ -106,3 +106,14 @@ test("rejects levels outside 2 to the maximum", () => {
   expect(() => generatePuzzle({ maxLevel: 1 })).toThrow(RangeError);
   expect(() => generatePuzzle({ maxLevel: MAX_LEVEL + 1 })).toThrow(RangeError);
 });
+
+test.each([4, 6, 9])("size %i: minLevel yields puzzles that need the harder techniques", (size) => {
+  const puzzle = generatePuzzle({ size, seed: 1, maxLevel: MAX_LEVEL, minLevel: 4 });
+  expect(puzzle.level).toBeGreaterThanOrEqual(4);
+  expect(solve(puzzle, { maxLevel: 3 }).solved).toBe(false);
+  expect(solve(puzzle).solution).toEqual(puzzle.solution);
+});
+
+test("rejects a minLevel above maxLevel", () => {
+  expect(() => generatePuzzle({ maxLevel: 3, minLevel: 4 })).toThrow(RangeError);
+});

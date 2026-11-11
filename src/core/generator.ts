@@ -16,6 +16,8 @@ export interface GenerateOptions {
    * Higher levels let more clues be dropped, so puzzles get harder. Defaults to 3.
    */
   maxLevel?: number;
+  /** Only return a puzzle that needs at least this level, at most `maxLevel`. Defaults to 1. */
+  minLevel?: number;
 }
 
 export interface GeneratedPuzzle extends Puzzle {
@@ -60,11 +62,14 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
   // level 1 has no rule that uses two-person clues, so it cannot always reach a solution
   if (!Number.isInteger(maxLevel) || maxLevel < 2 || maxLevel > MAX_LEVEL)
     throw new RangeError(`maxLevel must be an integer from 2 to ${MAX_LEVEL}, got ${maxLevel}`);
+  const minLevel = options.minLevel ?? 1;
+  if (!Number.isInteger(minLevel) || minLevel < 1 || minLevel > maxLevel)
+    throw new RangeError(`minLevel must be an integer from 1 to maxLevel, got ${minLevel}`);
   const rng = createRng(seed);
   const victim = size - 1;
   const suspects = range(size - 1);
 
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 200; attempt++) {
     const board = options.board ?? generateBoard(size, rng);
     const people = range(size).map((): Person => ({ gender: rng() < 0.5 ? "male" : "female" }));
     const solution = randomSolution(board, victim, rng);
@@ -98,7 +103,10 @@ export function generatePuzzle(options: GenerateOptions = {}): GeneratedPuzzle {
     const room = board.rooms[solution[victim]!];
     const murderer = suspects.find((p) => board.rooms[solution[p]!] === room)!;
     const { steps, level } = solve({ ...base, clues }, { maxLevel });
+    if (level < minLevel) continue;
     return { ...base, clues, solution, murderer, seed, steps, level };
   }
-  throw new Error("could not generate a puzzle; the given board may leave no valid placement");
+  throw new Error(
+    "could not generate a puzzle; the given board may leave no valid placement or never need minLevel",
+  );
 }
