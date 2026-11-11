@@ -2,7 +2,10 @@ import { expect, test } from "vite-plus/test";
 import { generatePuzzle, isStandable } from "../core";
 import { usePlay, type ProgressStore, type Selection } from "./usePlay";
 
-const puzzle = generatePuzzle({ size: 5, seed: 7 });
+// the first board that has a cell nobody can stand on, which some tests need
+const puzzle = Array.from({ length: 30 }, (_, seed) => generatePuzzle({ size: 5, seed })).find(
+  (p) => p.board.rooms.some((_, cell) => !isStandable(p.board, cell)),
+)!;
 const { board, solution } = puzzle;
 const cells = board.rooms.map((_, cell) => cell);
 const [free1, free2, free3] = cells.filter((c) => isStandable(board, c)) as [
@@ -201,7 +204,7 @@ test("progress survives a reload of the same puzzle, and only that puzzle", () =
   // history is not kept, so there is nothing to undo straight after a reload
   expect(again.play.canUndo.value).toBe(false);
 
-  const other = setup(store, generatePuzzle({ size: 5, seed: 8 }));
+  const other = setup(store, generatePuzzle({ size: 5, seed: 999 }));
   expect(other.play.started.value).toBe(false);
 });
 

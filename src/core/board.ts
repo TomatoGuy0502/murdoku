@@ -25,25 +25,39 @@ export function isBeside(board: Board, cell: number, object: ObjectKind): boolea
   );
 }
 
-/** `size` contiguous rooms grown from random seed cells, objects on ~30% of cells. */
+/**
+ * Rooms grown outward from random seed cells, objects on ~30% of cells.
+ *
+ * There are fewer rooms than people (two thirds of `size`) so that people share rooms,
+ * and each room grows at its own pace, so a board ends up with a hall or two and some
+ * small rooms rather than equal shares.
+ */
 function randomBoard(size: number, rng: Rng): Board {
   const count = size * size;
+  const roomCount = Math.round((size * 2) / 3);
   const rooms: number[] = Array.from({ length: count }, () => -1);
   shuffle(range(count), rng)
-    .slice(0, size)
+    .slice(0, roomCount)
     .forEach((cell, id) => (rooms[cell] = id));
-  for (let open = count - size; open > 0;) {
-    const cell = Math.floor(rng() * count);
-    if (rooms[cell] !== -1) continue;
-    const assigned = neighbors(size, cell).filter((n) => rooms[n] !== -1);
-    if (assigned.length === 0) continue;
-    rooms[cell] = rooms[pick(assigned, rng)]!;
-    open--;
+  // a room four times as eager claims its neighbouring cells four times as often
+  const eagerness = range(roomCount).map(() => 1 + 3 * rng());
+  for (let open = count - roomCount; open > 0; open--) {
+    // every unclaimed cell beside a room, once for each room it touches
+    const frontier = range(count).flatMap((cell) =>
+      rooms[cell] !== -1
+        ? []
+        : [...new Set(neighbors(size, cell).map((n) => rooms[n]!))]
+            .filter((room) => room !== -1)
+            .map((room) => ({ cell, room })),
+    );
+    let roll = rng() * frontier.reduce((sum, claim) => sum + eagerness[claim.room]!, 0);
+    const won = frontier.find((claim) => (roll -= eagerness[claim.room]!) < 0) ?? frontier[0]!;
+    rooms[won.cell] = won.room;
   }
   return {
     size,
     rooms,
-    roomKinds: shuffle(ROOM_KINDS, rng).slice(0, size),
+    roomKinds: shuffle(ROOM_KINDS, rng).slice(0, roomCount),
     objects: range(count).map(() => (rng() < 0.3 ? pick(OBJECT_KINDS, rng) : null)),
   };
 }
