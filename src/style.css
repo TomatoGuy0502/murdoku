@@ -1,30 +1,69 @@
+/*
+ * The page is a drawing of a crime scene: ink on drafting vellum in the light theme,
+ * the same drawing on a plain dark sheet in the dark one.
+ * Marker yellow is the evidence tag: it means "selected" or "your clue points here".
+ * Alarm red is only ever a broken rule.
+ */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --panel: #f6f5f8;
-  --accent: #aa3bff;
+  --paper: #e8edf1;
+  --sheet: #f6f8fa;
+  --ink: #14304d;
+  --ink-soft: #51667b;
+  --line: #b7c4d0;
+  --marker: #f4b400;
+  --marker-wash: #f4b40038;
+  --alarm: #c4321c;
 
-  font:
-    16px/1.5 system-ui,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  --male: #1f5fbf;
+  --female: #c2376e;
+  --victim: #14304d;
+  --on-person: #fff;
+
+  --room-0: #f6dcd9;
+  --room-1: #f6e7c4;
+  --room-2: #dcedd0;
+  --room-3: #cfece6;
+  --room-4: #d3e6f6;
+  --room-5: #dcdcf5;
+  --room-6: #ead8f2;
+  --room-7: #f5d6e4;
+  --room-8: #e1e5ea;
+
+  --sans: system-ui, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+
+  color-scheme: light;
+  font: 16px/1.5 var(--sans);
+  color: var(--ink-soft);
+  background: var(--paper);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --panel: #1f2028;
-    --accent: #c084fc;
-  }
+:root[data-theme="dark"] {
+  --paper: #15171c;
+  --sheet: #1f222a;
+  --ink: #eceff4;
+  --ink-soft: #a2a9b6;
+  --line: #363b47;
+  --marker: #ffc83a;
+  --marker-wash: #ffc83a33;
+  --alarm: #ff7a66;
+
+  --male: #7fb4ff;
+  --female: #ff94bd;
+  --victim: #eceff4;
+  --on-person: #15171c;
+
+  /* low in chroma: rooms should be told apart without glowing against the dark page */
+  --room-0: #4a3338;
+  --room-1: #4a4230;
+  --room-2: #2f4a38;
+  --room-3: #25494b;
+  --room-4: #2b4666;
+  --room-5: #3b3c68;
+  --room-6: #4a3663;
+  --room-7: #55334f;
+  --room-8: #3a4049;
+
+  color-scheme: dark;
 }
 
 body {
@@ -33,15 +72,81 @@ body {
 
 h1,
 h2 {
-  color: var(--text-h);
-  font-weight: 600;
   margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.95rem;
 }
 
 h2 {
-  font-size: 1rem;
+  font-size: 1.25rem;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--marker);
+  outline-offset: 2px;
+}
+
+/* Controls shared by every part of the page. */
+.btn,
+.field select,
+.field input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 12px;
+}
+
+.btn {
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* the one action a row is mostly there for */
+.btn.solid {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-weight: 500;
+}
+
+/* a tool that stays picked up: tagged in marker yellow while it is */
+.btn.tool[aria-pressed="true"] {
+  background: var(--marker);
+  border-color: var(--marker);
+  color: #14304d;
+  font-weight: 500;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

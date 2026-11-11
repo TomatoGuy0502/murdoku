@@ -54,40 +54,45 @@ const rows = computed(() => {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 4px;
+  /* ruled like a notebook: one statement to a line */
+  border-top: 1px solid var(--line);
+}
+
+.clues li {
+  border-bottom: 1px solid var(--line);
 }
 
 .row {
   width: 100%;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  padding: 6px 8px;
-  border: 2px solid transparent;
-  border-radius: 8px;
+  padding: 9px 10px 9px 12px;
+  border: 0;
   background: none;
   font: inherit;
   text-align: left;
-  color: var(--text-h);
+  color: var(--ink);
   cursor: pointer;
 }
 
 .row:hover {
-  border-color: var(--border);
+  background: var(--sheet);
 }
 
+/* the picked-up person is run over with the marker */
 .row.active {
-  border-color: var(--accent);
-  background: var(--bg);
+  background: var(--marker-wash);
+  box-shadow: inset 4px 0 0 var(--marker);
 }
 
 .text {
   flex: 1;
+  line-height: 1.45;
 }
 
 .placed {
-  color: var(--accent);
+  color: var(--ink-soft);
   font-weight: 700;
 }
 
@@ -95,26 +100,25 @@ const rows = computed(() => {
   flex: none;
   display: inline-grid;
   place-items: center;
-  min-width: 1.6rem;
-  height: 1.6rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
   padding: 0 4px;
   box-sizing: border-box;
   border-radius: 999px;
-  color: #fff;
+  color: var(--on-person);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
 }
 
 .badge.male {
-  background: #2f6fd6;
+  background: var(--male);
 }
 
 .badge.female {
-  background: #d6457f;
+  background: var(--female);
 }
 
 .badge.victim {
-  background: #2b2733;
-  outline: 1px solid var(--border);
+  background: var(--victim);
 }
 </style>

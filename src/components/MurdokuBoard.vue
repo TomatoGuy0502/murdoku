@@ -38,17 +38,7 @@ const emit = defineEmits<{
   strokeEnd: [];
 }>();
 
-const ROOM_COLORS = [
-  "#fde2e2",
-  "#dcefd9",
-  "#dbe7fb",
-  "#fbf0cf",
-  "#e9defa",
-  "#d5f0ee",
-  "#fbe3cf",
-  "#e6e9ee",
-  "#f6dcee",
-];
+const ROOM_TINTS = 9; // --room-0 to --room-8 in style.css, one set per theme
 
 // Lines are drawn once over the whole board rather than as cell borders: borders of
 // different widths meet badly at corners, and a neighbour's thin line cuts into a wall.
@@ -117,7 +107,7 @@ const cells = computed(() => {
       ]
         .filter(Boolean)
         .join("，"),
-      style: { backgroundColor: ROOM_COLORS[room % ROOM_COLORS.length] },
+      style: { backgroundColor: `var(--room-${room % ROOM_TINTS})` },
     };
   });
 });
@@ -125,7 +115,6 @@ const cells = computed(() => {
 /** The cell under the pointer during a press; null when no press is in progress. */
 let pressed: number | null = null;
 const HOLD_MS = 300;
-const PERSON_COLORS = { male: "#2f6fd6", female: "#d6457f", victim: "#2b2733" };
 let holdTimer: ReturnType<typeof setTimeout> | undefined;
 /** The cell whose long press is counting down, shown as a pie filling into a full circle. */
 const holding = shallowRef<number | null>(null);
@@ -133,7 +122,7 @@ const pieStyle = computed(() => {
   const person = props.holdPerson;
   if (person == null) return undefined;
   const kind = person === props.victim ? "victim" : props.people[person]!.gender;
-  return { "--pie": PERSON_COLORS[kind], animationDuration: `${HOLD_MS}ms` };
+  return { "--pie": `var(--${kind})`, animationDuration: `${HOLD_MS}ms` };
 });
 
 function stopHold() {
@@ -197,76 +186,114 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 </script>
 
 <template>
-  <div
-    class="board"
-    :style="{ gridTemplateColumns: `repeat(${board.size}, 1fr)` }"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
-    @contextmenu.prevent
-  >
-    <button
-      v-for="c in cells"
-      :key="c.cell"
-      type="button"
-      class="cell"
-      :class="{ blocked: c.blocked, 'lit-room': c.litRoom, hint: c.cell === hintCell }"
-      :style="c.style"
-      :data-cell="c.cell"
-      :title="c.title"
-      :aria-label="c.title"
-      :disabled="readonly"
-      @click="onKeyboardClick($event, c.cell)"
+  <div class="plan">
+    <!-- column and row numbers, the same ones the hints and steps refer to -->
+    <div class="ruler cols" aria-hidden="true">
+      <span v-for="n in board.size" :key="n">{{ n }}</span>
+    </div>
+    <div class="ruler rows" aria-hidden="true">
+      <span v-for="n in board.size" :key="n">{{ n }}</span>
+    </div>
+    <div
+      class="board"
+      :style="{ gridTemplateColumns: `repeat(${board.size}, 1fr)` }"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+      @contextmenu.prevent
     >
-      <span v-if="c.roomLabel" class="room-label">{{ c.roomLabel }}</span>
-      <span v-if="c.object" class="object" :class="{ lit: c.litObject }">
-        {{ OBJECT_ICONS[c.object] }}
-      </span>
-      <span
-        v-if="c.person"
-        class="person"
-        :class="[
-          c.person.gender,
-          {
-            victim: c.person.victim,
-            murderer: c.person.murderer,
-            conflict: c.person.conflict,
-            over: c.object,
-          },
-        ]"
+      <button
+        v-for="c in cells"
+        :key="c.cell"
+        type="button"
+        class="cell"
+        :class="{ blocked: c.blocked, 'lit-room': c.litRoom, hint: c.cell === hintCell }"
+        :style="c.style"
+        :data-cell="c.cell"
+        :title="c.title"
+        :aria-label="c.title"
+        :disabled="readonly"
+        @click="onKeyboardClick($event, c.cell)"
       >
-        {{ c.person.label }}
-      </span>
-      <span v-else-if="c.candidates.length > 0" class="candidates" :style="c.rim">
-        <span
-          v-for="p in c.candidates"
-          :key="p.index"
-          class="candidate"
-          :class="[p.gender, { victim: p.victim }]"
-          :style="p.slot"
-        >
-          {{ p.label[0] }}
+        <span v-if="c.roomLabel" class="room-label">{{ c.roomLabel }}</span>
+        <span v-if="c.object" class="object" :class="{ lit: c.litObject }">
+          {{ OBJECT_ICONS[c.object] }}
         </span>
-      </span>
-      <span v-else-if="c.empty" class="cross" aria-hidden="true" />
-      <span v-if="c.cell === holding" class="hold-pie" :style="pieStyle" aria-hidden="true" />
-    </button>
-    <svg
-      class="lines"
-      :viewBox="`0 0 ${board.size} ${board.size}`"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path class="grid" :d="lines.grid" />
-      <path class="walls" :d="lines.walls" />
-      <path class="walls frame" :d="lines.frame" />
-    </svg>
+        <span
+          v-if="c.person"
+          class="person"
+          :class="[
+            c.person.gender,
+            {
+              victim: c.person.victim,
+              murderer: c.person.murderer,
+              conflict: c.person.conflict,
+              over: c.object,
+            },
+          ]"
+        >
+          {{ c.person.label }}
+        </span>
+        <span v-else-if="c.candidates.length > 0" class="candidates" :style="c.rim">
+          <span
+            v-for="p in c.candidates"
+            :key="p.index"
+            class="candidate"
+            :class="[p.gender, { victim: p.victim }]"
+            :style="p.slot"
+          >
+            {{ p.label[0] }}
+          </span>
+        </span>
+        <span v-else-if="c.empty" class="cross" aria-hidden="true" />
+        <span v-if="c.cell === holding" class="hold-pie" :style="pieStyle" aria-hidden="true" />
+      </button>
+      <svg
+        class="lines"
+        :viewBox="`0 0 ${board.size} ${board.size}`"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path class="grid" :d="lines.grid" />
+        <g class="drafted">
+          <path class="walls" :d="lines.walls" />
+          <path class="walls frame" :d="lines.frame" />
+        </g>
+      </svg>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* the plan with its rulers: column numbers along the top, row numbers down the side */
+.plan {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  grid-template-rows: 1.25rem auto;
+}
+
+.ruler {
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cols {
+  grid-column: 2;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.rows {
+  grid-row: 2;
+  grid-auto-rows: 1fr;
+}
+
 .board {
+  grid-area: 2 / 2;
   position: relative;
   display: grid;
   width: 100%;
@@ -291,12 +318,27 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 }
 
 .grid {
-  stroke: #2b273333;
+  stroke: color-mix(in srgb, var(--ink) 22%, transparent);
   stroke-width: 1px;
 }
 
+/* a new plan is drawn in from the left, the way a plotter lays down its lines */
+.drafted {
+  animation: draft 0.7s ease-out;
+}
+
+@keyframes draft {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0);
+  }
+}
+
 .walls {
-  stroke: #2b2733;
+  stroke: var(--ink);
   stroke-width: 3px;
   /* square caps run half a width past each end, so corners and T-junctions close up */
   stroke-linecap: square;
@@ -318,7 +360,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   margin: 0;
   padding: 0;
   font: inherit;
-  color: #2b2733;
+  color: var(--ink);
   cursor: pointer;
   /* lets the marks inside scale with the cell */
   container-type: inline-size;
@@ -336,13 +378,17 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 }
 
 .cell:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--marker);
   outline-offset: -3px;
   z-index: 1;
 }
 
 .cell.blocked {
-  background-image: repeating-linear-gradient(45deg, #2b273322 0 2px, transparent 2px 8px);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--ink) 16%, transparent) 0 2px,
+    transparent 2px 8px
+  );
 }
 
 .room-label {
@@ -359,6 +405,11 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 /* Everything inside a cell is sized in cqw, a share of the cell's width, so it keeps
    its proportions from a roomy 4×4 down to a tight 10×10. */
 .object {
+  /* a square box whatever the glyph's own proportions, so the ring around it is a true circle */
+  display: grid;
+  place-items: center;
+  width: 1.4em;
+  aspect-ratio: 1;
   font-size: 34cqw;
   line-height: 1;
 }
@@ -367,17 +418,14 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   content: "";
   position: absolute;
   inset: 0;
-  background: #f59f0040;
+  background: var(--marker-wash);
   pointer-events: none;
 }
 
 .object.lit {
-  padding: 3px;
   border-radius: 50%;
-  background: #ffe066;
-  box-shadow:
-    0 0 0 3px #f08c00,
-    0 0 10px 3px #f08c00aa;
+  background: color-mix(in srgb, var(--marker) 45%, var(--sheet));
+  box-shadow: 0 0 0 3px var(--marker);
   z-index: 1;
 }
 
@@ -389,20 +437,20 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   border-radius: 50%;
   font-weight: 700;
   font-size: 24cqw;
-  color: #fff;
+  color: var(--on-person);
   z-index: 1;
 }
 
 .male {
-  background: #2f6fd6;
+  background: var(--male);
 }
 
 .female {
-  background: #d6457f;
+  background: var(--female);
 }
 
 .victim {
-  background: #2b2733;
+  background: var(--victim);
 }
 
 .person.victim {
@@ -410,14 +458,14 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
 }
 
 .person.murderer {
-  outline: 3px solid #e02424;
+  outline: 3px solid var(--alarm);
   outline-offset: 2px;
 }
 
 .person.conflict {
   box-shadow:
-    0 0 0 3px #fff,
-    0 0 0 6px #e02424;
+    0 0 0 3px var(--sheet),
+    0 0 0 6px var(--alarm);
 }
 
 .cell.hint::before {
@@ -425,8 +473,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   position: absolute;
   inset: 3px;
   z-index: 2;
-  border: 4px solid #f08c00;
-  border-radius: 8px;
+  border: 4px solid var(--marker);
   pointer-events: none;
   animation: hint-pulse 1s ease-in-out infinite alternate;
 }
@@ -457,7 +504,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   width: 84%;
   aspect-ratio: 1;
   border-radius: 50%;
-  color: #fff;
+  color: var(--on-person);
   font-size: clamp(7px, 13cqw, 16px);
   font-weight: 700;
   line-height: 1;
@@ -497,13 +544,13 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
     linear-gradient(
       45deg,
       transparent calc(50% - 3px),
-      #111 calc(50% - 3px) calc(50% + 3px),
+      var(--ink) calc(50% - 3px) calc(50% + 3px),
       transparent calc(50% + 3px)
     ),
     linear-gradient(
       -45deg,
       transparent calc(50% - 3px),
-      #111 calc(50% - 3px) calc(50% + 3px),
+      var(--ink) calc(50% - 3px) calc(50% + 3px),
       transparent calc(50% + 3px)
     );
 }

@@ -53,12 +53,12 @@ const rows = computed(() => {
 }
 
 .step::marker {
-  color: var(--text);
+  color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
 }
 
 .step {
-  color: var(--text-h);
+  color: var(--ink);
 }
 
 .step > * {
@@ -74,30 +74,30 @@ const rows = computed(() => {
   box-sizing: border-box;
   margin-right: 8px;
   border-radius: 999px;
-  color: #fff;
+  color: var(--on-person);
   font-weight: 700;
   font-size: 0.75rem;
 }
 
 .badge.male {
-  background: #2f6fd6;
+  background: var(--male);
 }
 
 .badge.female {
-  background: #d6457f;
+  background: var(--female);
 }
 
 .badge.victim {
-  background: #2b2733;
-  outline: 1px solid var(--border);
+  background: var(--victim);
 }
 
 .effect {
   margin-left: 8px;
-  color: var(--text);
+  color: var(--ink-soft);
 }
 
 .effect strong {
-  color: var(--accent);
+  color: var(--ink);
+  box-shadow: inset 0 -0.5em 0 var(--marker-wash);
 }
 </style>

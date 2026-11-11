@@ -84,43 +84,50 @@ const suspects = computed(() =>
   props.puzzle.people.map((_, index) => index).filter((index) => index !== props.puzzle.victim),
 );
 
-const legend = OBJECT_KINDS.map((kind) => ({
+const objects = OBJECT_KINDS.map((kind) => ({
   kind,
   icon: OBJECT_ICONS[kind],
   name: OBJECT_NAMES[kind],
   blocking: (BLOCKING_OBJECTS as readonly string[]).includes(kind),
 }));
+const legend = [
+  { label: "可以站上去", items: objects.filter((o) => !o.blocking) },
+  { label: "不能站", items: objects.filter((o) => o.blocking) },
+];
 </script>
 
 <template>
   <div class="layout">
     <div class="main">
-      <div class="modes" role="group" aria-label="點格子時的動作">
-        <button
-          v-for="t in TOOLS"
-          :key="t.value"
-          type="button"
-          class="mode"
-          :class="{ active: selected === t.value }"
-          :aria-pressed="selected === t.value"
-          @click="selected = t.value"
-        >
-          {{ t.label }}
-        </button>
-        <button
-          type="button"
-          class="mode ask"
-          :disabled="showSolution || hintLevel === 3 || (hintLevel > 0 && hint?.kind !== 'next')"
-          @click="askHint"
-        >
-          {{ hint?.kind === "next" ? HINT_BUTTON[hintLevel] : "提示" }}
-        </button>
-        <button type="button" class="mode" :disabled="!canUndo" @click="play.undo()">復原</button>
-        <button type="button" class="mode" :disabled="!started" @click="play.restart()">
-          重來
-        </button>
+      <div class="tools">
+        <div class="group" role="group" aria-label="點格子時的動作">
+          <button
+            v-for="t in TOOLS"
+            :key="t.value"
+            type="button"
+            class="btn tool"
+            :aria-pressed="selected === t.value"
+            @click="selected = t.value"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+        <div class="group">
+          <button
+            type="button"
+            class="btn"
+            :disabled="showSolution || hintLevel === 3 || (hintLevel > 0 && hint?.kind !== 'next')"
+            @click="askHint"
+          >
+            {{ hint?.kind === "next" ? HINT_BUTTON[hintLevel] : "提示" }}
+          </button>
+          <button type="button" class="btn" :disabled="!canUndo" @click="play.undo()">復原</button>
+          <button type="button" class="btn" :disabled="!started" @click="play.restart()">
+            重來
+          </button>
+        </div>
       </div>
-      <p class="hint">{{ usage }}</p>
+      <p class="usage">{{ usage }}</p>
 
       <MurdokuBoard
         :board="puzzle.board"
@@ -147,7 +154,7 @@ const legend = OBJECT_KINDS.map((kind) => ({
         <template v-else-if="!complete">
           已放置 {{ placedCount }} / {{ puzzle.people.length }} 人
           <span v-if="conflicts.length > 0" class="warn">
-            ，{{ conflicts.map(name).join("、") }} 違反規則（同列、同行，或死者房間超過兩人）
+            {{ conflicts.map(name).join("、") }} 違反規則：同列、同行，或死者房間超過兩人
           </span>
         </template>
         <template v-else-if="!correct">所有人都放好了，但有地方不符合線索或規則。</template>
@@ -163,7 +170,7 @@ const legend = OBJECT_KINDS.map((kind) => ({
             v-for="person in suspects"
             :key="person"
             type="button"
-            class="accuse"
+            class="btn"
             @click="accused = person"
           >
             {{ name(person) }}
@@ -171,7 +178,7 @@ const legend = OBJECT_KINDS.map((kind) => ({
         </template>
       </div>
 
-      <section v-if="hintLevel > 0 && !showSolution" class="panel hint-box" role="status">
+      <section v-if="hintLevel > 0 && !showSolution" class="hint-box" role="status">
         <h2>提示</h2>
         <p v-if="!hint">所有人都放對了。</p>
         <p v-else-if="hint.kind === 'wrong'">
@@ -183,14 +190,14 @@ const legend = OBJECT_KINDS.map((kind) => ({
             <li v-for="reason in hintReasons" :key="reason">{{ reason }}</li>
           </ol>
           <p v-if="hintLevel >= 3" class="where">
-            {{ name(hint.person) }} 在{{ cellName(puzzle.board.size, hint.cell) }}（盤面上的橘框）。
+            {{ name(hint.person) }} 在{{ cellName(puzzle.board.size, hint.cell) }}（盤面上的黃框）。
           </p>
         </template>
       </section>
     </div>
 
     <aside class="side">
-      <section class="panel">
+      <section class="block">
         <h2>人物與線索</h2>
         <MurdokuClues
           :puzzle="puzzle"
@@ -198,21 +205,24 @@ const legend = OBJECT_KINDS.map((kind) => ({
           :positions="state.positions"
           @select="selected = $event"
         />
-        <p class="note">
-          選一個人、無人或橡皮擦，再點格子；進度會自動保存。死者是{{
-            GENDER_NAMES[puzzle.people[puzzle.victim]!.gender]
-          }}； 兇手是唯一與死者同房間的人。
+        <p class="rule">
+          死者是{{ GENDER_NAMES[puzzle.people[puzzle.victim]!.gender] }}，沒有線索。
+          兇手是唯一與死者同房間的人。
         </p>
       </section>
 
-      <section class="panel">
-        <h2>物件</h2>
-        <ul class="legend">
-          <li v-for="item in legend" :key="item.kind">
-            {{ item.icon }} {{ item.name }}
-            <small>{{ item.blocking ? "不可站" : "可站" }}</small>
-          </li>
-        </ul>
+      <section class="block">
+        <h2>地圖上的物件</h2>
+        <dl class="legend">
+          <div v-for="group in legend" :key="group.label">
+            <dt>{{ group.label }}</dt>
+            <dd>
+              <span v-for="item in group.items" :key="item.kind" class="item">
+                {{ item.icon }} {{ item.name }}
+              </span>
+            </dd>
+          </div>
+        </dl>
       </section>
     </aside>
   </div>
@@ -220,12 +230,12 @@ const legend = OBJECT_KINDS.map((kind) => ({
 
 <style scoped>
 .layout {
-  /* The board is a square as tall as the window allows once the header, the tool row
+  /* The plan is a square as tall as the window allows once the masthead, the tools
      above it and the status line below it have their room; never smaller than 320px. */
-  --board: max(320px, calc(100dvh - 18rem));
+  --board: max(320px, calc(100dvh - 19rem));
   display: grid;
   grid-template-columns: minmax(0, var(--board)) minmax(260px, 1fr);
-  gap: 24px;
+  gap: 20px 40px;
   align-items: start;
 }
 
@@ -240,65 +250,28 @@ const legend = OBJECT_KINDS.map((kind) => ({
   display: grid;
   /* without this the single column grows to its widest child and spills out of the layout */
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
 }
 
-.modes {
+.main {
+  gap: 10px;
+}
+
+.side {
+  gap: 28px;
+}
+
+.tools,
+.group {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
 }
 
-.mode,
-.accuse {
-  font: inherit;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text-h);
-  cursor: pointer;
+.tools {
+  justify-content: space-between;
 }
 
-.mode.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.mode:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.ask {
-  margin-left: auto;
-}
-
-.warn {
-  color: #e02424;
-}
-
-.hint-box p {
-  margin: 0;
-  color: var(--text-h);
-}
-
-.reasons {
-  margin: 0;
-  padding-left: 1.4rem;
-  display: grid;
-  gap: 4px;
-  font-size: 0.9rem;
-}
-
-.where {
-  font-weight: 700;
-}
-
-.hint {
-  margin: 0;
+.usage {
   font-size: 0.875rem;
 }
 
@@ -307,36 +280,76 @@ const legend = OBJECT_KINDS.map((kind) => ({
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  min-height: 2rem;
-  color: var(--text-h);
-  font-weight: 600;
+  min-height: 2.25rem;
+  color: var(--ink);
+  font-weight: 500;
 }
 
-.panel {
+.warn {
+  color: var(--alarm);
+}
+
+/* a note pinned beside the plan: the marker stripe says it came from the hint button */
+.hint-box {
   display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
+  gap: 8px;
+  padding: 4px 0 4px 16px;
+  border-left: 4px solid var(--marker);
+  color: var(--ink);
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9375rem;
+}
+
+.where {
+  font-weight: 700;
+}
+
+.block {
+  display: grid;
+  gap: 12px;
+}
+
+.rule {
+  max-width: 44ch;
+  font-size: 0.875rem;
 }
 
 .legend {
-  list-style: none;
   margin: 0;
-  padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 6px 12px;
-  color: var(--text-h);
+  gap: 8px;
+  color: var(--ink);
 }
 
-.legend small {
-  color: var(--text);
+/* each label sits above its own row of items, so the items never wrap around the label */
+.legend {
+  gap: 12px;
 }
 
-.note {
-  margin: 0;
+.legend div {
+  display: grid;
+  gap: 2px;
+}
+
+.legend dt {
   font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.legend dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.item {
+  white-space: nowrap;
 }
 </style>
