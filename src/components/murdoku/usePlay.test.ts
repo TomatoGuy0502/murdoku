@@ -152,3 +152,29 @@ test("is correct only once everyone stands on the solution", () => {
   expect(play.complete.value).toBe(true);
   expect(play.correct.value).toBe(true);
 });
+
+test("flags placed people who share a row or column, or crowd the victim's room", () => {
+  const { play, hold } = setup();
+  const size = board.size;
+  const free = cells.filter((c) => isStandable(board, c));
+  const sameRow = free.find(
+    (c) => c !== free[0] && Math.floor(c / size) === Math.floor(free[0]! / size),
+  )!;
+  hold(0, free[0]!);
+  expect(play.conflicts.value).toEqual([]);
+  hold(1, sameRow);
+  expect(play.conflicts.value).toEqual([0, 1]);
+  hold(1, sameRow);
+  expect(play.conflicts.value).toEqual([]);
+
+  // the solution itself breaks no rule, until a third person joins the victim's room
+  const fresh = setup();
+  solution.forEach((cell, person) => fresh.hold(person, cell));
+  expect(fresh.play.conflicts.value).toEqual([]);
+  const { victim, murderer } = puzzle;
+  const room = board.rooms[solution[victim]!];
+  const spare = free.find((c) => board.rooms[c] === room && !solution.includes(c))!;
+  const intruder = solution.findIndex((_, person) => person !== victim && person !== murderer);
+  fresh.hold(intruder, spare);
+  expect(fresh.play.conflicts.value).toEqual(expect.arrayContaining([victim, murderer, intruder]));
+});

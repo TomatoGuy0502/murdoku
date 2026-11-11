@@ -39,13 +39,19 @@ export interface SolveResult {
  * impossible given the current candidates, and rules repeat until nothing changes.
  * No rule ever assumes a placement, so `solved` means solvable without guessing
  * (and therefore uniquely solvable).
+ *
+ * `known` fixes people whose cell is already settled (null or missing = not yet), so the
+ * steps returned are the deductions still to make from there.
  */
-export function solve(puzzle: Puzzle): SolveResult {
+export function solve(puzzle: Puzzle, known: (number | null)[] = []): SolveResult {
   const { board, people, victim, clues } = puzzle;
   const { size, rooms } = board;
   const everyone = range(people.length);
   const standable = range(size * size).filter((c) => isStandable(board, c));
-  const cand = everyone.map(() => new Set(standable));
+  const cand = everyone.map((p) => {
+    const cell = known[p];
+    return new Set(cell == null ? standable : [cell]);
+  });
   const steps: Step[] = [];
 
   const keep = (

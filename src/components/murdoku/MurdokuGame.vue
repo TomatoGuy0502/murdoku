@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { BLOCKING_OBJECTS, OBJECT_KINDS, type GeneratedPuzzle } from "../../murdoku";
 import MurdokuBoard from "./MurdokuBoard.vue";
 import MurdokuClues from "./MurdokuClues.vue";
-import { GENDER_NAMES, OBJECT_ICONS, OBJECT_NAMES, personLabel } from "./labels";
+import { nextHint } from "./hint";
+import { GENDER_NAMES, OBJECT_ICONS, OBJECT_NAMES, cellName, personLabel } from "./labels";
 import { usePlay } from "./usePlay";
 
 // The parent keys this component by puzzle, so a new puzzle starts from a clean state.
 const props = defineProps<{ puzzle: GeneratedPuzzle; showSolution: boolean }>();
 
 const play = usePlay(props.puzzle);
-const { state, selected, canUndo, placedCount, complete, correct } = play;
+const { state, selected, canUndo, conflicts, placedCount, complete, correct } = play;
 const accused = shallowRef<number | null>(null);
 
 const name = (person: number) => personLabel(person, props.puzzle.victim);
@@ -20,7 +21,7 @@ const TOOLS = [
 ] as const;
 /** The selected person; null while the nobody-here mark or the eraser is picked instead. */
 const active = computed(() => (typeof selected.value === "number" ? selected.value : null));
-const hint = computed(() =>
+const usage = computed(() =>
   active.value === null
     ? TOOLS.find((t) => t.value === selected.value)!.hint
     : `單擊或拖曳標記 ${name(active.value)} 的候選，長按放置`,
@@ -34,6 +35,29 @@ const lit = computed(() => {
     rooms: clues.flatMap((clue) => (clue.type === "inRoom" ? [clue.room] : [])),
   };
 });
+
+// Each press of the hint button says a little more: who is next, why, then where.
+const HINT_BUTTON = ["", "為什麼？", "在哪裡？", "在哪裡？"];
+const hintLevel = shallowRef(0);
+const hint = computed(() =>
+  hintLevel.value === 0
+    ? null
+    : nextHint(props.puzzle, props.puzzle.solution, state.value.positions),
+);
+// a hint is about the board as it stood; any change to who is placed retires it
+watch(
+  () => state.value.positions.join(),
+  () => (hintLevel.value = 0),
+);
+function askHint() {
+  hintLevel.value = Math.min(hintLevel.value + 1, 3);
+  if (hint.value?.kind === "next") selected.value = hint.value.person;
+}
+/** People to ring in red: rule breakers, plus anyone a hint has exposed as misplaced. */
+const flagged = computed(() => [
+  ...conflicts.value,
+  ...(hint.value?.kind === "wrong" ? hint.value.people : []),
+]);
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
@@ -72,11 +96,17 @@ const legend = OBJECT_KINDS.map((kind) => ({
         >
           {{ t.label }}
         </button>
-        <button type="button" class="mode undo" :disabled="!canUndo" @click="play.undo()">
-          復原
+        <button
+          type="button"
+          class="mode ask"
+          :disabled="showSolution || hintLevel === 3 || (hintLevel > 0 && hint?.kind !== 'next')"
+          @click="askHint"
+        >
+          {{ hint?.kind === "next" ? HINT_BUTTON[hintLevel] : "提示" }}
         </button>
+        <button type="button" class="mode" :disabled="!canUndo" @click="play.undo()">復原</button>
       </div>
-      <p class="hint">{{ hint }}</p>
+      <p class="hint">{{ usage }}</p>
 
       <MurdokuBoard
         :board="puzzle.board"
@@ -86,6 +116,8 @@ const legend = OBJECT_KINDS.map((kind) => ({
         :candidates="showSolution ? undefined : state.candidates"
         :empty="showSolution ? undefined : state.empty"
         :hold-person="active"
+        :conflicts="showSolution ? undefined : flagged"
+        :hint-cell="!showSolution && hintLevel === 3 && hint?.kind === 'next' ? hint.cell : null"
         :lit-objects="showSolution ? undefined : lit.objects"
         :lit-rooms="showSolution ? undefined : lit.rooms"
         :murderer="showSolution ? puzzle.murderer : undefined"
@@ -100,6 +132,9 @@ const legend = OBJECT_KINDS.map((kind) => ({
         <template v-if="showSolution">兇手：{{ name(puzzle.murderer) }}</template>
         <template v-else-if="!complete">
           已放置 {{ placedCount }} / {{ puzzle.people.length }} 人
+          <span v-if="conflicts.length > 0" class="warn">
+            ，{{ conflicts.map(name).join("、") }} 違反規則（同列、同行，或死者房間超過兩人）
+          </span>
         </template>
         <template v-else-if="!correct">所有人都放好了，但有地方不符合線索或規則。</template>
         <template v-else-if="accused === puzzle.murderer">
@@ -121,6 +156,23 @@ const legend = OBJECT_KINDS.map((kind) => ({
           </button>
         </template>
       </div>
+
+      <section v-if="hintLevel > 0 && !showSolution" class="panel hint-box" role="status">
+        <h2>提示</h2>
+        <p v-if="!hint">所有人都放對了。</p>
+        <p v-else-if="hint.kind === 'wrong'">
+          {{ hint.people.map(name).join("、") }} 放錯位置了（已用紅圈標出）。
+        </p>
+        <template v-else>
+          <p>接下來可以確定 {{ name(hint.person) }} 的位置。</p>
+          <ol v-if="hintLevel >= 2" class="reasons">
+            <li v-for="reason in hint.reasons" :key="reason">{{ reason }}</li>
+          </ol>
+          <p v-if="hintLevel >= 3" class="where">
+            {{ name(hint.person) }} 在{{ cellName(puzzle.board.size, hint.cell) }}（盤面上的橘框）。
+          </p>
+        </template>
+      </section>
     </div>
 
     <aside class="side">
@@ -203,8 +255,29 @@ const legend = OBJECT_KINDS.map((kind) => ({
   cursor: default;
 }
 
-.undo {
+.ask {
   margin-left: auto;
+}
+
+.warn {
+  color: #e02424;
+}
+
+.hint-box p {
+  margin: 0;
+  color: var(--text-h);
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.where {
+  font-weight: 700;
 }
 
 .hint {

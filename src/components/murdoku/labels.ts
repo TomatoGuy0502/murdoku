@@ -39,6 +39,10 @@ const DIRECTION_NAMES: Record<Direction, string> = {
   west: "西",
 };
 
+export function cellName(size: number, cell: number): string {
+  return `第 ${Math.floor(cell / size) + 1} 列第 ${(cell % size) + 1} 行`;
+}
+
 export function personLabel(person: number, victim: number): string {
   return person === victim ? "死者" : String.fromCharCode(65 + person);
 }

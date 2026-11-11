@@ -16,6 +16,10 @@ const props = defineProps<{
   empty?: boolean[];
   /** The person a long press would place; without one, holding does nothing. */
   holdPerson?: number | null;
+  /** Placed people to flag as breaking a rule or standing on the wrong cell. */
+  conflicts?: number[];
+  /** A cell to point the player at. */
+  hintCell?: number | null;
   /** Object kinds to make stand out, e.g. the ones the active person's clues mention. */
   litObjects?: ObjectKind[];
   /** Rooms to make stand out. */
@@ -81,6 +85,7 @@ const cells = computed(() => {
     gender: props.people[person]!.gender,
     victim: person === props.victim,
     murderer: person === props.murderer,
+    conflict: props.conflicts?.includes(person) ?? false,
   });
   return rooms.map((room, cell) => {
     const row = Math.floor(cell / size);
@@ -207,7 +212,7 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
       :key="c.cell"
       type="button"
       class="cell"
-      :class="{ blocked: c.blocked, 'lit-room': c.litRoom }"
+      :class="{ blocked: c.blocked, 'lit-room': c.litRoom, hint: c.cell === hintCell }"
       :style="c.style"
       :data-cell="c.cell"
       :title="c.title"
@@ -224,7 +229,12 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
         class="person"
         :class="[
           c.person.gender,
-          { victim: c.person.victim, murderer: c.person.murderer, over: c.object },
+          {
+            victim: c.person.victim,
+            murderer: c.person.murderer,
+            conflict: c.person.conflict,
+            over: c.object,
+          },
         ]"
       >
         {{ c.person.label }}
@@ -403,8 +413,31 @@ function onKeyboardClick(event: MouseEvent, cell: number) {
   outline-offset: 2px;
 }
 
+.person.conflict {
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px #e02424;
+}
+
+.cell.hint::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+  border: 4px solid #f08c00;
+  border-radius: 8px;
+  pointer-events: none;
+  animation: hint-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes hint-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
 /* placed over an object: let it show through */
-.person.over {
+.person.over:not(.conflict) {
   opacity: 0.55;
 }
 

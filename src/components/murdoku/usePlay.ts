@@ -117,6 +117,26 @@ export function usePlay(puzzle: Puzzle) {
   const correct = computed(
     () => complete.value && isValidSolution(puzzle, state.value.positions as number[]),
   );
+  /** Placed people who break a rule: sharing a row or column, or crowding the victim's room. */
+  const conflicts = computed(() => {
+    const { size, rooms } = puzzle.board;
+    const placed = state.value.positions.flatMap((cell, person) =>
+      cell === null ? [] : [{ person, cell }],
+    );
+    const bad = new Set<number>();
+    for (const a of placed)
+      for (const b of placed)
+        if (
+          a.person < b.person &&
+          (Math.floor(a.cell / size) === Math.floor(b.cell / size) ||
+            a.cell % size === b.cell % size)
+        )
+          bad.add(a.person).add(b.person);
+    const victim = placed.find((p) => p.person === puzzle.victim);
+    const inVictimRoom = placed.filter((p) => victim && rooms[p.cell] === rooms[victim.cell]);
+    if (inVictimRoom.length > 2) for (const p of inVictimRoom) bad.add(p.person);
+    return [...bad].sort((a, b) => a - b);
+  });
   const canUndo = computed(() => history.value.length > 0);
 
   return {
@@ -128,6 +148,7 @@ export function usePlay(puzzle: Puzzle) {
     strokeEnd,
     undo,
     canUndo,
+    conflicts,
     placedCount,
     complete,
     correct,
